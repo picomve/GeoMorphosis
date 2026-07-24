@@ -1,0 +1,14 @@
+{
+  "name": "geopulse-worker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.14",
+    "axios": "^1.7.2"
+  }
+}

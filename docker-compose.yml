@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - '3000:3000'
+    environment:
+      - NEXT_PUBLIC_AI_ENGINE_URL=http://ai-engine:8000
+      - NEXT_PUBLIC_WORKER_URL=http://worker:3001
+    depends_on:
+      - ai-engine
+    volumes:
+      - ./data:/app/data
+
+  ai-engine:
+    build: ./ai-engine
+    ports:
+      - '8000:8000'
+    environment:
+      - COPERNICUS_CLIENT_ID=${COPERNICUS_CLIENT_ID}
+      - COPERNICUS_CLIENT_SECRET=${COPERNICUS_CLIENT_SECRET}
+      - NASA_FIRMS_API_KEY=${NASA_FIRMS_API_KEY}
+    volumes:
+      - ./data:/app/data
+      - ./ai-engine/models:/app/models
+
+  worker:
+    build: ./worker
+    environment:
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+    depends_on:
+      - ai-engine
+    volumes:
+      - ./data:/app/data
+
+volumes:
+  data:
