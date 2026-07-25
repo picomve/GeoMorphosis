@@ -61,3 +61,7 @@ ai-engine/models/*.pt
 .idea/
 *.swp
 *.swo
+
+*.json
+!package.json
+!tsconfig.json

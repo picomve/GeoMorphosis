@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Map from '@/components/Map';
 import Analytics from '@/components/Analytics';
 
 export default function Home() {
+  const router = useRouter();
   const [selectedRegion, setSelectedRegion] = useState(null);
   const [analysisResult, setAnalysisResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -25,6 +27,13 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDetail = () => {
+    if (!selectedRegion) return;
+    const lat = selectedRegion.lat;
+    const lon = selectedRegion.lng || selectedRegion.lon;
+    router.push(`/region?lat=${lat}&lon=${lon}`);
   };
 
   return (
@@ -68,8 +77,11 @@ export default function Home() {
             </div>
 
             {analysisResult && (
-              <div className="card">
+              <div className="card space-y-3">
                 <Analytics data={analysisResult} />
+                <button onClick={handleDetail} className="w-full bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 transition-colors duration-200 font-medium text-sm">
+                  Detayli Incele
+                </button>
               </div>
             )}
           </div>
