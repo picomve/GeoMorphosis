@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -62,16 +62,23 @@ def analyze(req: AnalyzeRequest):
 
 
 @app.get("/satellite/latest")
-def latest_satellite(lat: float, lon: float, buffer_meters: int = 1000):
+def latest_satellite(
+    lat: Optional[float] = Query(default=None),
+    lon: Optional[float] = Query(default=None),
+    buffer_meters: int = 1000,
+):
+    if lat is None or lon is None:
+        return {
+            "demo": True,
+            "message": "lat ve lon parametreleri gerekli. Ornek: /satellite/latest?lat=39.18&lon=37.34",
+        }
     try:
         result = get_latest_image(lat, lon, buffer_meters)
         if result is None:
-            raise HTTPException(status_code=404, detail="Uygun goruntu bulunamadi")
+            return {"demo": True, "message": "Uygun goruntu bulunamadi", "lat": lat, "lon": lon}
         return result
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"demo": True, "message": str(e), "lat": lat, "lon": lon}
 
 
 @app.post("/subscribe")
