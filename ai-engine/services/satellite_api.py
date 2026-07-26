@@ -20,7 +20,7 @@ def _init_earth_engine():
         import ee
 
         credentials_path = os.environ.get("GOOGLE_EARTH_ENGINE_CREDENTIALS")
-        project_id = os.environ.get("GOOGLE_EARTH_ENGINE_PROJECT", "elegant-shelter-503515-e0")
+        project_id = os.environ.get("GOOGLE_EARTH_ENGINE_PROJECT", "geomorphosis")
 
         if credentials_path and os.path.exists(credentials_path):
             creds = ee.ServiceAccountCredentials(None, credentials_path)
