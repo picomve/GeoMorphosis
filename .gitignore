@@ -62,7 +62,9 @@ ai-engine/models/*.pt
 *.swp
 *.swo
 
-!elegant-shelter.json
 !package.json
 !tsconfig.json
-!geomorphosis-cb3ae273c071.json
+
+# Google Cloud credentials
+ai-engine/*.json
+!ai-engine/package.json
