@@ -61,3 +61,10 @@ ai-engine/models/*.pt
 .idea/
 *.swp
 *.swo
+
+!package.json
+!tsconfig.json
+
+# Google Cloud credentials
+ai-engine/*.json
+!ai-engine/package.json
