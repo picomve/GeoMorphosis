@@ -1,16 +1,18 @@
-version: '3.8'
-
 services:
-  api-server:
-    build:
-      context: ./ai-engine
-    container_name: geomorphosis-backend
+  ai-engine:
+    build: ./ai-engine
+    container_name: geomorphosis-ai-engine
     ports:
       - "8000:8000"
-    volumes:
-      - ./ai-engine:/app
     environment:
       - PYTHONUNBUFFERED=1
+      - GOOGLE_EARTH_ENGINE_PROJECT=geomorphosis
+      - GOOGLE_EARTH_ENGINE_CREDENTIALS=/app/geomorphosis-cb3ae273c071.json
+    volumes:
+      - ./ai-engine:/app
+      - ./data:/app/data
+      - /app/venv
+    restart: unless-stopped
 
   web-client:
     build:
@@ -21,30 +23,15 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
-      # İŞTE HAYAT KURTARAN SATIR (Veritabanı Köprüsü):
-      # Ana dizindeki 'data' klasörünü, konteynırın içindeki '/app/data' klasörüne bağlıyoruz!
       - ./data:/app/data
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-      # Prisma'ya veritabanını konteynır içinde nerede bulacağını söylüyoruz:
-      - DATABASE_URL=file:/app/data/geopulse.db
+      - NEXT_PUBLIC_AI_ENGINE_URL=http://ai-engine:8000
     depends_on:
-      - api-server
-
-  ai-engine:
-    build: ./ai-engine
-    ports:
-      - '8000:8000'
-    environment:
-      - COPERNICUS_CLIENT_ID=${COPERNICUS_CLIENT_ID}
-      - COPERNICUS_CLIENT_SECRET=${COPERNICUS_CLIENT_SECRET}
-      - NASA_FIRMS_API_KEY=${NASA_FIRMS_API_KEY}
-    volumes:
-      - ./data:/app/data
-      - ./ai-engine/models:/app/models
+      - ai-engine
 
   worker:
     build: ./worker
+    container_name: geomorphosis-worker
     environment:
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_PORT=${SMTP_PORT}
@@ -56,6 +43,3 @@ services:
       - ai-engine
     volumes:
       - ./data:/app/data
-
-volumes:
-  data:
