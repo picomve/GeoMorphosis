@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { sendTelegramNotification } from '@/lib/telegram';
 
 export async function POST(request) {
   try {
@@ -12,8 +13,8 @@ export async function POST(request) {
     const aiEngineUrl = process.env.NEXT_PUBLIC_AI_ENGINE_URL || 'http://localhost:8000';
 
     const payload = {
-      lat: coordinates.lat,
-      lon: coordinates.lng || coordinates.lon,
+      lat: coordinates.lat ??'Bilinmiyor',
+      lon: (coordinates.lng || coordinates.lon) ?? 'Bilinmiyor',
       buffer_meters: coordinates.radius || 1000,
     };
 
@@ -29,9 +30,27 @@ export async function POST(request) {
       });
       clearTimeout(timeout);
       const data = await response.json();
+
+      console.log('--- TELEGRAM DEBUG ---');
+console.log('body:', body);
+console.log('coordinates:', coordinates);
+console.log('payload:', payload);
+console.log('----------------------');
+
+      await sendTelegramNotification(
+      `Koordinat:${payload.lat}, ${payload.lon}\nHarita üzerinde yeni bir bölge analizi başarıyla tamamlandı.`,
+      'GEO-PULSE Analiz Raporu'
+    );
+
       return NextResponse.json(data);
-    } catch {
+    } catch(error) {
       clearTimeout(timeout);
+
+      await sendTelegramNotification(
+      `Analiz sırasında bir hata oluştu: ${error.message}`,
+      'Analiz Hatası'
+    );
+
       return NextResponse.json({
         status: 'completed',
         region_name: `Bolge [${payload.lat}, ${payload.lon}]`,
@@ -92,8 +111,19 @@ export async function GET(request) {
     clearTimeout(timeout);
     const satelliteData = await response.json();
 
+    await sendTelegramNotification(
+    `Koordinat: ${resolvedLat}, ${resolvedLon}\nBölge görüntülendi.`,
+    'Harita Analiz Raporu'
+    );
+
     return NextResponse.json({ ...fallback, satellite: satelliteData });
-  } catch {
+  } catch (error) {
+   
+    await sendTelegramNotification(
+      `Uydu servisi cevap vermediği için analiz sırasında bir hata oluştu: ${error.message}`,
+      'Analiz Hatası'
+    )
+
     return NextResponse.json(fallback);
   }
 }
