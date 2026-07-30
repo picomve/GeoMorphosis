@@ -11,6 +11,7 @@ function RegionContent() {
   const mapInstanceRef = useRef(null);
   const [regionData, setRegionData] = useState(null);
   const [activeTab, setActiveTab] = useState('map');
+  const [analysisStatus, setAnalysisStatus] = useState('loading'); // 'loading' | 'success' | 'error'
 
   const lat = parseFloat(searchParams.get('lat')) || 0;
   const lon = parseFloat(searchParams.get('lon')) || 0;
