@@ -9,6 +9,7 @@ function RegionContent() {
   const searchParams = useSearchParams();
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
+
   const [regionData, setRegionData] = useState(null);
   const [activeTab, setActiveTab] = useState('map');
 
@@ -21,12 +22,17 @@ function RegionContent() {
     const fetchRegion = async () => {
       try {
         const res = await fetch(`/api/analyze?lat=${lat}&lon=${lon}`);
+
         const data = await res.json();
+
+        console.log('Region API:', data);
+
         setRegionData(data);
       } catch (err) {
         console.error('Veri yuklenemedi:', err);
       }
     };
+
     fetchRegion();
   }, [lat, lon]);
 
@@ -38,6 +44,7 @@ function RegionContent() {
     await import('leaflet/dist/leaflet.css');
 
     delete L.Icon.Default.prototype._getIconUrl;
+
     L.Icon.Default.mergeOptions({
       iconUrl: '/marker-icon.png',
       iconRetinaUrl: '/marker-icon-2x.png',
@@ -74,7 +81,8 @@ function RegionContent() {
       weight: 2,
     }).addTo(map);
 
-    L.marker([lat, lon]).addTo(map)
+    L.marker([lat, lon])
+      .addTo(map)
       .bindPopup(`Enlem: ${lat}<br>Boylam: ${lon}`)
       .openPopup();
 
@@ -90,6 +98,7 @@ function RegionContent() {
 
     return () => {
       clearTimeout(timer);
+
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
@@ -101,9 +110,20 @@ function RegionContent() {
     <main className="min-h-screen bg-gray-50">
       <nav className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-3">
-          <a href="/" className="text-primary-600 hover:underline text-sm">&#8592; Ana Sayfaya Don</a>
-          <h1 className="text-xl font-bold text-gray-800 mt-1">Bolge Detay</h1>
-          <p className="text-sm text-gray-500">Enlem: {lat} | Boylam: {lon}</p>
+          <a
+            href="/"
+            className="text-primary-600 hover:underline text-sm"
+          >
+            ← Ana Sayfaya Don
+          </a>
+
+          <h1 className="text-xl font-bold text-gray-800 mt-1">
+            Bolge Detay
+          </h1>
+
+          <p className="text-sm text-gray-500">
+            Enlem: {lat} | Boylam: {lon}
+          </p>
         </div>
       </nav>
 
@@ -112,15 +132,20 @@ function RegionContent() {
           <button
             onClick={() => setActiveTab('map')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === 'map' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+              activeTab === 'map'
+                ? 'bg-primary-600 text-white'
+                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
             }`}
           >
             Uydu Goruntusu
           </button>
+
           <button
             onClick={() => setActiveTab('analysis')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === 'analysis' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+              activeTab === 'analysis'
+                ? 'bg-primary-600 text-white'
+                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
             }`}
           >
             Analiz Sonuclari
@@ -129,7 +154,13 @@ function RegionContent() {
 
         {activeTab === 'map' && (
           <div className="card p-0 overflow-hidden">
-            <div ref={mapRef} style={{ height: '600px', width: '100%' }} />
+            <div
+              ref={mapRef}
+              style={{
+                height: '600px',
+                width: '100%',
+              }}
+            />
           </div>
         )}
 
@@ -138,29 +169,41 @@ function RegionContent() {
             {regionData ? (
               <Analytics data={regionData} />
             ) : (
-              <p className="text-gray-500">Analiz verisi yukleniyor...</p>
+              <p className="text-gray-500">
+                Analiz verisi yukleniyor...
+              </p>
             )}
           </div>
         )}
 
         <div className="card">
-          <h3 className="font-semibold mb-3">Bolge Bilgileri</h3>
+          <h3 className="font-semibold mb-3">
+            Bolge Bilgileri
+          </h3>
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div>
               <p className="text-gray-500">Enlem</p>
               <p className="font-medium">{lat}</p>
             </div>
+
             <div>
               <p className="text-gray-500">Boylam</p>
               <p className="font-medium">{lon}</p>
             </div>
+
             <div>
               <p className="text-gray-500">Tampon Alan</p>
               <p className="font-medium">1 km</p>
             </div>
+
             <div>
-              <p className="text-gray-500">Harita Kaynagi</p>
-              <p className="font-medium">Esri World Imagery</p>
+              <p className="text-gray-500">
+                Harita Kaynagi
+              </p>
+              <p className="font-medium">
+                Esri World Imagery
+              </p>
             </div>
           </div>
         </div>
@@ -171,11 +214,15 @@ function RegionContent() {
 
 export default function RegionDetail() {
   return (
-    <Suspense fallback={
-      <main className="min-h-screen flex items-center justify-center">
-        <div className="text-gray-500">Yukleniyor...</div>
-      </main>
-    }>
+    <Suspense
+      fallback={
+        <main className="min-h-screen flex items-center justify-center">
+          <div className="text-gray-500">
+            Yukleniyor...
+          </div>
+        </main>
+      }
+    >
       <RegionContent />
     </Suspense>
   );
