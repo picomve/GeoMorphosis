@@ -3,7 +3,7 @@ import { sendTelegramNotification } from '@/lib/telegram';
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { message, title } = body;
+    const {userId, message, title } = body;
 
     if (!message) {
       return Response.json(
@@ -13,6 +13,7 @@ export async function POST(request) {
     }
 
     const isSent = await sendTelegramNotification(
+      userId,
       message,
       title || 'Sistem Bildirimi'
     );
