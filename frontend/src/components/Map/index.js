@@ -15,6 +15,10 @@ export default function Map({ onRegionSelect }) {
     vegetation: false,
   });
 
+ // src/components/Map/index.js (Sadece değişen/eklenen kısımlar)
+
+// src/components/Map/index.js (Sadece değişen/eklenen kısımlar)
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -22,6 +26,10 @@ export default function Map({ onRegionSelect }) {
       const L = (await import('leaflet')).default;
       await import('leaflet/dist/leaflet.css');
       await import('leaflet.heat');
+      
+      // Çizim eklentisi ve CSS'ini dinamik olarak yüklüyoruz
+      await import('leaflet-draw/dist/leaflet.draw.css');
+      await import('leaflet-draw');
 
       if (mapInstanceRef.current) return;
 
@@ -33,130 +41,84 @@ export default function Map({ onRegionSelect }) {
         position: 'bottomleft',
       }).addTo(map);
 
-      // Normal harita
+      // --- Katman tanımlamaları aynı kalacak (normalMap, satelliteMap, heatmap'ler) ---
+      const normalMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap',
+        maxZoom: 19,
+      });
 
-      const normalMap = L.tileLayer(
-        'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        {
-          attribution: '&copy; OpenStreetMap',
-          maxZoom: 19,
-        }
-      );
-
-      // Uydu katmanı
-
-      const satelliteMap = L.tileLayer(
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        {
-          attribution: 'Tiles © Esri',
-          maxZoom: 19,
-        }
-      );
+      const satelliteMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles © Esri',
+        maxZoom: 19,
+      });
 
       normalMap.addTo(map);
 
-      // Heatmap veri noktaları hazırlanıyor: [lat, lng, intensity]
+      // Heatmap kodları burada aynen kalsın...
+      // ...
 
-      const firePoints = mockHeatmapData.map((p) => [
-        p.lat,
-        p.lng,
-        p.intensity,
-      ]);
+      // --- YENİ EKLENEN ÇİZİM MANTIĞI ---
+      
+      // Çizilen şekilleri tutacağımız bir katman grubu oluşturuyoruz
+      const drawnItems = new L.FeatureGroup();
+      map.addLayer(drawnItems);
 
-      const pollutionPoints = mockHeatmapData.map((p) => [
-        p.lat + 0.2,
-        p.lng,
-        0.5,
-      ]);
-
-      const vegetationPoints = mockHeatmapData.map((p) => [
-        p.lat - 0.2,
-        p.lng,
-        0.75,
-      ]);
-
-      // Yangın heatmap (kırmızı-turuncu-sarı)
-
-const fireLayer = L.heatLayer(firePoints, {
-  radius: 38,
-  blur: 28,
-  maxZoom: 9,
-  minOpacity: 0.35,
-  gradient: {
-    0.2: '#22c55e',
-    0.5: '#f59e0b',
-    0.8: '#ef4444',
-  },
-});
-
-// Kirlilik heatmap (mavi tonları)
-
-const pollutionLayer = L.heatLayer(pollutionPoints, {
-  radius: 38,
-  blur: 28,
-  maxZoom: 9,
-  minOpacity: 0.35,
-  gradient: {
-    0.3: '#93c5fd',
-    0.6: '#3b82f6',
-    1.0: '#1e40af',
-  },
-});
-
-// NDVI heatmap (yeşil tonları)
-
-const vegetationLayer = L.heatLayer(vegetationPoints, {
-  radius: 38,
-  blur: 28,
-  maxZoom: 9,
-  minOpacity: 0.35,
-  gradient: {
-    0.3: '#bbf7d0',
-    0.6: '#4ade80',
-    1.0: '#15803d',
-  },
-});
-
-      // Varsayılan olarak yangın katmanı açık
-
-      fireLayer.addTo(map);
-
-      // Bölge seçimi
-
-      let selectedArea = null;
-
-      map.on('click', (e) => {
-        if (selectedArea) {
-          map.removeLayer(selectedArea);
+      // Çizim aracının (toolbar) ayarları
+      const drawControl = new L.Control.Draw({
+        position: 'bottomright', // YENİ EKLENDİ: Araç çubuğunu sağ alta taşıyoruz
+        edit: {
+          featureGroup: drawnItems, 
+        },
+        draw: {
+          polygon: true,
+          rectangle: true,
+          circle: false, 
+          circlemarker: false,
+          marker: false,
+          polyline: false,
         }
+      });
+      map.addControl(drawControl);
 
-        selectedArea = L.circle(e.latlng, {
-          radius: 5000,
-          color: '#2563eb',
-          fillColor: '#2563eb',
-          fillOpacity: 0.2,
-          weight: 3,
-        }).addTo(map);
+      // Çizim tamamlandığında tetiklenecek olay
+      map.on(L.Draw.Event.CREATED, (e) => {
+        // Eğer her seferinde sadece tek bir alan seçilmesini istiyorsak, 
+        // yeni çizim yapıldığında öncekileri temizleyebiliriz:
+        drawnItems.clearLayers(); 
 
+        const layer = e.layer;
+        drawnItems.addLayer(layer);
+
+        // Şekli GeoJSON formatına dönüştürüyoruz (FR-1 görevinin kalbi)
+        const geoJsonData = layer.toGeoJSON();
+        console.log("Üretilen GeoJSON Verisi:", geoJsonData);
+
+        // Üst bileşene (page.js) bu veriyi gönderiyoruz
+        // Analiz API'miz şimdilik merkez noktası (lat, lng) bekliyor olabilir, 
+        // uyumluluğu bozmamak için merkezi de hesaplayıp gönderiyoruz.
+        const center = layer.getBounds().getCenter();
         onRegionSelect?.({
-          lat: e.latlng.lat,
-          lng: e.latlng.lng,
-          radius: 5000,
+          geoJson: geoJsonData,
+          lat: center.lat,
+          lng: center.lng,
+          radius: 1000 // İleride poligonun alanına göre dinamikleştirilebilir
         });
       });
+
+      // Eski `map.on('click')` ile çember çizen kodu silebilirsin.
+
+      // ----------------------------------
 
       mapInstanceRef.current = map;
       layersRef.current = {
         normalMap,
         satelliteMap,
-        fireLayer,
-        pollutionLayer,
-        vegetationLayer,
+        // heatmap katmanları...
       };
     };
 
     initMap();
-
+    // ...
     return () => {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
