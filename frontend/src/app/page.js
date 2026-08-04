@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Map from '@/components/Map';
+import Toast from '@/components/Toast';
 
 export default function Home() {
   const router = useRouter();
@@ -11,11 +12,18 @@ export default function Home() {
   const [analysisResult, setAnalysisResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
+  const [toast, setToast] = useState(null);
 
   const handleAnalyze = async () => {
     if (!selectedRegion) return;
 
     setLoading(true);
+    // Analiz başladığında bilgi bildirimi gösteriyoruz
+    setToast({
+      type: 'info',
+      title: 'Analiz Başlatıldı',
+      message: 'Seçilen bölge için uydu verileri işleniyor, lütfen bekleyin...'
+    });
 
     try {
       const res = await fetch('/api/analyze', {
@@ -31,8 +39,21 @@ export default function Home() {
       const data = await res.json();
 
       setAnalysisResult(data);
+      
+      // Analiz başarıyla bittiğinde başarı bildirimi gösteriyoruz
+      setToast({
+        type: 'success',
+        title: 'Analiz Tamamlandı',
+        message: 'Bölge analizi başarıyla sonuçlandı. Detayları inceleyebilirsiniz.'
+      });
     } catch (err) {
       console.error('Analiz hatası:', err);
+      // Hata durumunda hata bildirimi gösteriyoruz
+      setToast({
+        type: 'danger',
+        title: 'Analiz Hatası',
+        message: 'Veriler işlenirken bir sorun oluştu. Lütfen tekrar deneyin.'
+      });
     } finally {
       setLoading(false);
     }
@@ -205,6 +226,16 @@ export default function Home() {
           </div>
 
         </div>
+      )}
+
+      {/* Toast Bildirim Alanı */}
+      {toast && (
+        <Toast
+          type={toast.type}
+          title={toast.title}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
       )}
 
     </main>
