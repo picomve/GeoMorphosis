@@ -68,3 +68,16 @@ ai-engine/models/*.pt
 # Google Cloud credentials
 ai-engine/*.json
 !ai-engine/package.json
+# Proje genelindeki tüm data ve dataset klasörleri
+data/
+dataset/
+**/data/
+**/dataset/
+
+# Veritabanı ve büyük model dosyaları
+*.db
+*.pt
+ai-engine/runs/
+
+# Hassas API anahtarı
+gee-key.json
