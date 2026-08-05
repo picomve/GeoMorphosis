@@ -68,6 +68,7 @@ ai-engine/models/*.pt
 # Google Cloud credentials
 ai-engine/*.json
 !ai-engine/package.json
+
 # Proje genelindeki tüm data ve dataset klasörleri
 data/
 dataset/
