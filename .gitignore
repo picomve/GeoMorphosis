@@ -51,7 +51,7 @@ data/cache/*
 
 # models
 ai-engine/models/*.pt
-
+ai-engine/Mehmet-yolo/
 # database
 *.db
 *.sqlite

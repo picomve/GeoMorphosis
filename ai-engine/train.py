@@ -1,5 +1,5 @@
 """
-GeoMorphosis - YOLOv8 Model Eğitimi (GPU Optimize)
+GeoMorphosis - Mehmet-yolo Veri Seti ile Fine-Tuning Eğitimi
 """
 
 from ultralytics import YOLO
@@ -8,32 +8,54 @@ import shutil
 
 BASE_DIR = Path(__file__).resolve().parent
 
-def start_training():
-    yaml_path = BASE_DIR / "dataset" / "data.yaml"
-    
-    # Pretrained YOLOv8 Nano modeli
-    model = YOLO("yolov8n.pt")
 
-    print("[+] YOLOv8 Model Eğitimi GPU Üzerinde Başlatılıyor...")
-    
-    # Eğitimi başlat
+def start_fine_tuning():
+    # 1. Yeni oluşturduğumuz birleşik YAML yolunu belirtiyoruz
+    yaml_path = BASE_DIR / "Mehmet-yolo" / "data_combined.yaml"
+
+    # 2. Önceki eğitimden elde ettiğimiz model ağırlığı
+    previous_model_path = BASE_DIR / "models" / "fire_yolov8.pt"
+
+    if not previous_model_path.exists():
+        print(f"[!] Hata: {previous_model_path} bulunamadı!")
+        return
+
+    if not yaml_path.exists():
+        print(f"[!] Hata: {yaml_path} bulunamadı! Yolu kontrol edin.")
+        return
+
+    print(f"[+] Önceki model yükleniyor: {previous_model_path}")
+    model = YOLO(str(previous_model_path))
+
+    print(f"[+] {yaml_path} üzerinden fine-tuning başlatılıyor...")
+
+    # 3. Eğitimi başlat
     results = model.train(
         data=str(yaml_path),
-        epochs=30,             # Eğitim tur sayısı
-        imgsz=640,             # Görsel çözünürlüğü
-        batch=16,              # 8 GB GPU VRAM için ideal batch boyutu
-        device=0,              # NVIDIA Ekran Kartını (GPU) kullanır
-        workers=4,             # Veri işleme izlek sayısı
-        name="geomorphosis_run"
+        epochs=20,  # Fine-tuning için 15-20 epoch yeterlidir
+        imgsz=640,
+        batch=16,
+        device=0,  # GPU kullanımı için 0 (CPU için "cpu")
+        name="geomorphosis_mehmet_run",
     )
 
-    # Eğitilen en iyi model ağırlığını projenin models/ klasörüne kopyala
-    best_weights = BASE_DIR / "runs" / "detect" / "geomorphosis_run" / "weights" / "best.pt"
-    target_weights = BASE_DIR / "models" / "fire_yolov8.pt"
+    # 4. En iyi model ağırlığını kopyala
+    best_weights = (
+        BASE_DIR
+        / "runs"
+        / "detect"
+        / "geomorphosis_mehmet_run"
+        / "weights"
+        / "best.pt"
+    )
+    target_weights = BASE_DIR / "models" / "fire_yolov8_v2.pt"
 
     if best_weights.exists():
         shutil.copy(best_weights, target_weights)
-        print(f"\n[✔] Eğitim başarıyla tamamlandı! Yeni model ağırlığı güncellendi: {target_weights}")
+        print(
+            f"\n[✔] Eğitim tamamlandı! Yeni model kaydedildi: {target_weights}"
+        )
+
 
 if __name__ == "__main__":
-    start_training()
+    start_fine_tuning()
