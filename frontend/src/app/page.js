@@ -26,18 +26,40 @@ export default function Home() {
     });
 
     try {
+      // GeoJSON poligonundan ilk noktayı (merkez veya başlangıç) alalım
+      // GeoJSON formatı: { geometry: { coordinates: [[[lng, lat], ...]] } }
+      let lat, lng;
+      
+      if (selectedRegion.type === 'Feature') {
+        const coords = selectedRegion.geometry.coordinates[0][0]; // İlk noktanın koordinatları
+        lng = coords[0];
+        lat = coords[1];
+      } else {
+        // Fallback (Eğer direkt obje gelirse diye)
+        lat = selectedRegion.lat;
+        lng = selectedRegion.lng || selectedRegion.lon;
+      }
+
+      // API'nin beklediği yeni "Vezne" payload formatı
+      const payload = {
+        start_points: [{ lat, lng }],
+        end_points: [], // Şimdilik boş
+        buffer_meters: 1000,
+      };
+
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          coordinates: selectedRegion,
-        }),
+        body: JSON.stringify(payload), // Artık 'coordinates' değil 'payload' gönderiyoruz
       });
 
-      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(`HTTP hatası! Durum: ${res.status}`);
+      }
 
+      const data = await res.json();
       setAnalysisResult(data);
       
       // Analiz başarıyla bittiğinde başarı bildirimi gösteriyoruz
