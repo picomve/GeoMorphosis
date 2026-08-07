@@ -13,6 +13,9 @@ import {
   Tooltip,
 } from 'recharts';
 
+// Rapor bileşenini import ediyoruz
+import Report from '@/components/Report';
+
 const RISK_LABELS = {
   yok: 'Yok',
   dusuk: 'Düşük',
@@ -87,9 +90,15 @@ export default function Analytics({ data }) {
           </p>
         </div>
 
-        <span className="px-4 py-2 rounded-full bg-green-100 text-green-700 font-semibold">
-          ● {data.status ?? 'Analiz tamamlandı'}
-        </span>
+        {/* Durum rozeti ve Rapor butonu yan yana eklendi */}
+        <div className="flex flex-col sm:flex-row items-center gap-4">
+          <span className="px-4 py-2 rounded-full bg-green-100 text-green-700 font-semibold whitespace-nowrap">
+            ● {data.status ?? 'Analiz tamamlandı'}
+          </span>
+          <div className="w-full sm:w-56">
+            <Report data={data} />
+          </div>
+        </div>
       </div>
 
       {/* Üst Kartlar */}

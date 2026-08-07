@@ -40,3 +40,16 @@ body {
   width: 100%;
   z-index: 0;
 }
+/* Leaflet Draw İkon Düzeltmesi */
+.leaflet-draw-toolbar a {
+  background-image: url('https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/images/spritesheet.png') !important;
+}
+
+.leaflet-retina .leaflet-draw-toolbar a {
+  background-image: url('https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/images/spritesheet-2x.png') !important;
+}
+
+.leaflet-draw-actions a {
+  background-color: #1f2937 !important; /* Tailwind gray-800 */
+  color: #fff !important;
+}
