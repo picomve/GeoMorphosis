@@ -1,30 +1,31 @@
+import json
+import os
+import sys
+import uuid
+from datetime import datetime
+from typing import Optional
+
+import redis
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
-import json
-import sys
-import os
-import redis
-import uuid
 
-# utils klasöründeki veritabanı fonksiyonlarımıza erişmek için yol ayarı
+# utils ve services klasörlerindeki bağımlılıklar
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from utils.index import init_db, get_db_connection
-from services.satellite_api import download_satellite_series, get_latest_image
+from services.analysis_service import analyze_region as analyze_region_service
+from services.satellite_api import get_latest_image
+from utils.index import get_db_connection, init_db
 
-# FastAPI uygulamasını başlat
 app = FastAPI(
     title="GeoMorphosis AI Engine",
     description="Coğrafi Çevre İzleme ve Erken Uyarı Sistemi - Yapay Zeka Katmanı",
-    version="1.0.0"
+    version="1.0.0",
 )
 
-# Next.js frontend'inden gelecek isteklere izin vermek için CORS ayarları
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Geliştirme aşamasında tüm kaynaklara izin veriyoruz
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -46,48 +47,47 @@ class SubscribeRequest(BaseModel):
     region_id: str
     notification_type: str = "email"
 
-# Uygulama ayağa kalktığında veritabanı tablolarının hazır olduğundan emin ol
+
 @app.on_event("startup")
 def startup_event():
     init_db()
+
 
 @app.get("/")
 def read_root():
     return {"status": "active", "service": "GeoMorphosis AI Engine Ready"}
 
-# --- VEZNE (RECEPTION) ENDPOINT'İ ---
-# Frontend sadece buraya istek atıp bir fiş numarası (task_id) alacak.
-@app.post("/api/analyze")
+@app.post("/analyze")
 def analyze_region(request: AnalyzeRequest, req: Request):
     try:
-        ip_address = req.client.host if req.client else "unknown"
-        task_id = str(uuid.uuid4())
+        if not request.start_points:
+            raise HTTPException(status_code=400, detail="start_points gerekli")
 
-        # Worker'a (Mutfak) gidecek veriyi hazırlıyoruz
-        task_data = {
+        first_point = request.start_points[0]
+        lat = first_point.get("lat") or first_point.get("latitude")
+        lon = first_point.get("lon") or first_point.get("lng") or first_point.get("longitude")
+
+        if lat is None or lon is None:
+            raise HTTPException(status_code=400, detail="start_points içindeki ilk nokta lat ve lon içermeli")
+
+        task_id = uuid.uuid4().hex
+        task_payload = {
             "start_points": request.start_points,
             "end_points": request.end_points,
             "buffer_meters": request.buffer_meters,
-            "years": request.years,
-            "ip_address": ip_address
+            "years": request.years or [],
         }
 
-        # 1. Görevi Redis'e kaydet (pending durumu ile)
         r.hset(f"task:{task_id}", mapping={
             "status": "pending",
-            "data": json.dumps(task_data)
+            "payload": json.dumps(task_payload),
+            "created_at": datetime.utcnow().isoformat() + "Z",
         })
+        r.rpush("taskQueue", task_id)
 
-        # 2. Görevi Mutfak kuyruğuna (taskQueue) it
-        r.lpush("taskQueue", task_id)
-
-        # Not: Eskiden veritabanı kaydı (sqlite) burada eşzamanlı yapılıyordu. 
-        # Artık bu işlem Node.js tarafında veya ayrı bir sonuç okuyucu serviste yapılmalı.
-
-        return {
-            "task_id": task_id,
-            "message": "Analiz sıraya alındı, mutfakta işleniyor."
-        }
+        return {"task_id": task_id, "message": "Görev kuyruğa eklendi"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -117,17 +117,24 @@ def latest_satellite(
     if lat is None or lon is None:
         return {
             "demo": True,
-            "message": "lat ve lon parametreleri gerekli. Ornek: /satellite/latest?lat=39.18&lon=37.34",
+            "message": (
+                "lat ve lon parametreleri gerekli. Ornek:"
+                " /satellite/latest?lat=39.18&lon=37.34"
+            ),
         }
     try:
         result = get_latest_image(lat, lon, buffer_meters)
         if result is None:
-            return {"demo": True, "message": "Uygun goruntu bulunamadi", "lat": lat, "lon": lon}
+            return {
+                "demo": True,
+                "message": "Uygun goruntu bulunamadi",
+                "lat": lat,
+                "lon": lon,
+            }
         return result
     except Exception as e:
         return {"demo": True, "message": str(e), "lat": lat, "lon": lon}
 
 
 if __name__ == "__main__":
-    # Sunucuyu 8000 portunda başlat
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
