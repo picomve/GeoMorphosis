@@ -7,7 +7,10 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import uvicorn
+from typing import Optional
+import json
+import sys
+import os
 
 # utils ve services klasörlerindeki bağımlılıklar
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -29,13 +32,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Redis bağlantısı (Docker üzerinden, Node.js Worker ile haberleşmek için)
+# decode_responses=True sayesinde veriler byte yerine string olarak gelir
+r = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
 
+# Güncellenmiş Request Modeli (Frontend ekibinin kullanacağı start ve end pointler eklendi)
 class AnalyzeRequest(BaseModel):
-    lat: float
-    lon: float
+    start_points: list
+    end_points: list
     buffer_meters: int = 1000
     years: Optional[list[int]] = None
-
 
 class SubscribeRequest(BaseModel):
     email: str
@@ -52,7 +58,6 @@ def startup_event():
 def read_root():
     return {"status": "active", "service": "GeoMorphosis AI Engine Ready"}
 
-
 @app.post("/analyze")
 def analyze_region(request: AnalyzeRequest, req: Request):
     try:
@@ -60,36 +65,34 @@ def analyze_region(request: AnalyzeRequest, req: Request):
         coordinates = f"{request.lat},{request.lon}"
         region_name = f"Bolge [{request.lat}, {request.lon}]"
 
-        analysis = analyze_region_service(
+        results = download_satellite_series(
             lat=request.lat,
             lon=request.lon,
             buffer_meters=request.buffer_meters,
             years=request.years,
         )
 
-        demo_mode = analysis["demo_mode"]
-        ai_results_dict = analysis["ai_results"]
-        downloaded = analysis["downloaded"]
-        ai_results_json = json.dumps(ai_results_dict)
+        downloaded = [r for r in results if r["status"] == "ok"]
+        demo_mode = any(r["status"] == "demo" for r in results)
+
+        ai_results = json.dumps({
+            "fire_risk": "dusuk",
+            "pollution_level": "yok",
+            "ndvi_score": 0.75,
+            "satellite_images": downloaded,
+            "total_years_analyzed": len(results),
+            "demo_mode": demo_mode,
+        })
+
         image_no = str(len(downloaded))
 
-        # 4. Veritabanına Kayıt
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            """
+        cursor.execute('''
             INSERT INTO regions_analysis
             (ip_address, image_no, region_name, coordinates, ai_results)
             VALUES (?, ?, ?, ?, ?)
-        """,
-            (
-                ip_address,
-                image_no,
-                region_name,
-                coordinates,
-                ai_results_json,
-            ),
-        )
+        ''', (ip_address, image_no, region_name, coordinates, ai_results))
         conn.commit()
         record_id = cursor.lastrowid
         conn.close()
@@ -97,14 +100,34 @@ def analyze_region(request: AnalyzeRequest, req: Request):
         return {
             "status": "completed",
             "region_name": region_name,
-            "record_id": record_id,
+            "fire_risk": "dusuk",
+            "pollution_level": "yok",
+            "ndvi_score": 0.75,
+            "satellite_images": downloaded,
+            "total_years_analyzed": len(results),
             "demo_mode": demo_mode,
-            "ai_results": ai_results_dict,
+            "record_id": record_id,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# --- DURUM SORGULAMA ENDPOINT'İ ---
+# Frontend'in polling (sürekli sorgulama) yaparak analiz sonucunu alacağı yer.
+@app.get("/api/status/{task_id}")
+def get_status(task_id: str):
+    task = r.hgetall(f"task:{task_id}")
 
+    if not task:
+        raise HTTPException(status_code=404, detail="Görev bulunamadı")
+
+    # Eğer görev tamamlanmışsa Node.js Worker'dan gelen stringified JSON result'u objeye çevir
+    if task.get("status") == "completed" and "result" in task:
+        task["result"] = json.loads(task["result"])
+
+    return task
+
+
+# Mevcut satellite endpoint'ini bozmadan koruyoruz
 @app.get("/satellite/latest")
 def latest_satellite(
     lat: Optional[float] = Query(default=None),
