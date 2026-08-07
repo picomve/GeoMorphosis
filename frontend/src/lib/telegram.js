@@ -1,5 +1,11 @@
-import  prisma  from "./prisma"; // Aynı klasördeki index.js'ten alıyoruz
+export async function sendTelegramNotification(chatId,message, title = 'Sistem Bildirimi') {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
 
+  if (!token || !chatId || token.includes('your_')) {
+    console.warn('Telegram konfigürasyonu eksik, bildirim atlanıyor.');
+    return false;
+  }
+}
 export async function linkTelegramAccount(userId, chatId) {
   try {
     const updatedUser = await prisma.regions_analysis.update({
