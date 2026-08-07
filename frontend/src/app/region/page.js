@@ -30,7 +30,7 @@ function RegionContent() {
         
         // 1. Vezneye (FastAPI) iş emrini ver (POST)
         // Backend'in beklediği start_points listesine haritadaki lat/lon'u gönderiyoruz
-        const postRes = await fetch('(/api(analyze', {
+        const postRes = await fetch('/api/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -237,7 +237,7 @@ function RegionContent() {
         {activeTab === 'analysis' && (
           <div className="card">
             {analysisStatus === 'loading' && (
-              <p className="text-gray-500">FastAPI'ye bağlanılıyor...</p>
+              <p className="text-gray-500">FastAPI&apos;ye bağlanılıyor...</p>
             )}
             {analysisStatus === 'processing' && (
               <p className="text-blue-500 font-semibold animate-pulse">Yapay zeka verileri işliyor, lütfen bekleyin...</p>

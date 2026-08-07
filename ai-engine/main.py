@@ -1,16 +1,15 @@
 import json
 import os
 import sys
+import uuid
 from datetime import datetime
 from typing import Optional
 
+import redis
+import uvicorn
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
-import json
-import sys
-import os
 
 # utils ve services klasörlerindeki bağımlılıklar
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -61,53 +60,34 @@ def read_root():
 @app.post("/analyze")
 def analyze_region(request: AnalyzeRequest, req: Request):
     try:
-        ip_address = req.client.host if req.client else "unknown"
-        coordinates = f"{request.lat},{request.lon}"
-        region_name = f"Bolge [{request.lat}, {request.lon}]"
+        if not request.start_points:
+            raise HTTPException(status_code=400, detail="start_points gerekli")
 
-        results = download_satellite_series(
-            lat=request.lat,
-            lon=request.lon,
-            buffer_meters=request.buffer_meters,
-            years=request.years,
-        )
+        first_point = request.start_points[0]
+        lat = first_point.get("lat") or first_point.get("latitude")
+        lon = first_point.get("lon") or first_point.get("lng") or first_point.get("longitude")
 
-        downloaded = [r for r in results if r["status"] == "ok"]
-        demo_mode = any(r["status"] == "demo" for r in results)
+        if lat is None or lon is None:
+            raise HTTPException(status_code=400, detail="start_points içindeki ilk nokta lat ve lon içermeli")
 
-        ai_results = json.dumps({
-            "fire_risk": "dusuk",
-            "pollution_level": "yok",
-            "ndvi_score": 0.75,
-            "satellite_images": downloaded,
-            "total_years_analyzed": len(results),
-            "demo_mode": demo_mode,
-        })
-
-        image_no = str(len(downloaded))
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO regions_analysis
-            (ip_address, image_no, region_name, coordinates, ai_results)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (ip_address, image_no, region_name, coordinates, ai_results))
-        conn.commit()
-        record_id = cursor.lastrowid
-        conn.close()
-
-        return {
-            "status": "completed",
-            "region_name": region_name,
-            "fire_risk": "dusuk",
-            "pollution_level": "yok",
-            "ndvi_score": 0.75,
-            "satellite_images": downloaded,
-            "total_years_analyzed": len(results),
-            "demo_mode": demo_mode,
-            "record_id": record_id,
+        task_id = uuid.uuid4().hex
+        task_payload = {
+            "start_points": request.start_points,
+            "end_points": request.end_points,
+            "buffer_meters": request.buffer_meters,
+            "years": request.years or [],
         }
+
+        r.hset(f"task:{task_id}", mapping={
+            "status": "pending",
+            "payload": json.dumps(task_payload),
+            "created_at": datetime.utcnow().isoformat() + "Z",
+        })
+        r.rpush("taskQueue", task_id)
+
+        return {"task_id": task_id, "message": "Görev kuyruğa eklendi"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
