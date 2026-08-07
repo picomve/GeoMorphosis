@@ -1,9 +1,9 @@
-import { sendTelegramNotification } from '@/lib/telegram';
+import { sendEmailNotification } from '@/lib/email';
 
 export async function POST(request) {
   try {
     const body = await request.json();
-    const {chatId, message, title } = body;
+    const { to, message, title } = body;
 
     if (!message) {
       return Response.json(
@@ -12,16 +12,15 @@ export async function POST(request) {
       );
     }
 
-    if (!chatId) {
+    if (!to) {
       return Response.json(
-        { success: false, error: 'Alıcı (chatId) zorunludur.' },
+        { success: false, error: 'Alıcı email adresi (to) zorunludur.' },
         { status: 400 }
       );
     }
 
-
-    const isSent = await sendTelegramNotification(
-      chatId,
+    const isSent = await sendEmailNotification(
+      to,
       message,
       title || 'Sistem Bildirimi'
     );
@@ -29,19 +28,19 @@ export async function POST(request) {
     if (isSent) {
       return Response.json({
         success: true,
-        message: 'Telegram bildirimi başarıyla gönderildi.',
+        message: 'Email bildirimi başarıyla gönderildi.',
       });
     } else {
       return Response.json(
         {
           success: false,
-          error: 'Telegram bildirimi gönderilemedi. Sunucu loglarını kontrol edin.',
+          error: 'Email bildirimi gönderilemedi. Sunucu loglarını kontrol edin.',
         },
         { status: 500 }
       );
     }
   } catch (error) {
-    console.error('Notify API hatası:', error);
+    console.error('Notify Email API hatası:', error);
     return Response.json(
       { success: false, error: 'İstek işlenirken bir hata oluştu.' },
       { status: 500 }
@@ -49,20 +48,19 @@ export async function POST(request) {
   }
 }
 
-// Tarayıcıdan test edebilmek için geçici bir GET metodu da eklenir
 export async function GET() {
-  const testChatId = process.env.TELEGRAM_CHAT_ID; // kendi chat ID'n
+  const testEmail = process.env.TEST_EMAIL_TO;
 
-  const isSent = await sendTelegramNotification(
-    testChatId,
-    'Notify endpoint\'i başarıyla oluşturuldu ve çalışıyor! Bu, bir test mesajıdır.',
+  const isSent = await sendEmailNotification(
+    testEmail,
+    'Notify email endpoint\'i başarıyla oluşturuldu ve çalışıyor! Bu, bir test mesajıdır.',
     'Sistem Testi'
   );
 
   return Response.json({
     status: isSent ? 'ok' : 'error',
     message: isSent
-      ? 'Test mesajı Telegram\'a gönderildi!'
-      : 'Mesaj gönderilemedi.',
+      ? 'Test e-postası gönderildi!'
+      : 'E-posta gönderilemedi.',
   });
 }
