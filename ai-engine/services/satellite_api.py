@@ -6,9 +6,42 @@ _ee_initialized = False
 _ee_error = None
 _ee_available = False
 
+RGB_BANDS = ["B4", "B3", "B2"]
+NIR_BAND = "B8"
+THUMB_SIZE = "512x512"
+
 
 class EarthEngineError(Exception):
     pass
+
+
+def _default_cache_dir():
+    """Indirilen goruntulerin yazilacagi klasor.
+
+    Varsayilan olarak ai-engine/data/cache; docker-compose bu yolu
+    ./data:/app/data mount'u ile paylasiyor (bkz. utils/index.py DATA_DIR).
+    """
+    env_dir = os.environ.get("SATELLITE_CACHE_DIR")
+    if env_dir:
+        return env_dir
+    return str(Path(__file__).resolve().parent.parent / "data" / "cache")
+
+
+def _coordinate_slug(lat, lon):
+    """Farkli bolgelerin onbellek dosyalarini birbirine karistirmamak icin."""
+    return f"{lat:.4f}_{lon:.4f}".replace("-", "m").replace(".", "p")
+
+
+def _download_thumb(image, vis_params, file_path):
+    """GEE thumbnail URL'sini indirip diske yazar."""
+    url = image.getThumbURL(vis_params)
+    response = requests.get(url, timeout=60)
+    response.raise_for_status()
+
+    with open(file_path, "wb") as f:
+        f.write(response.content)
+
+    return file_path
 
 
 def _init_earth_engine():
@@ -39,19 +72,33 @@ def _init_earth_engine():
         print("Demo moduyla calisilacak")
 
 
+def _empty_result(year, status, **extra):
+    """Tum dallarda ayni anahtar setini dondurmek icin ortak yardimci.
+
+    analysis_service, indirilen goruntuleri rgb_path/ndvi_path alanlarina gore
+    filtreledigi icin bu iki anahtarin her durumda bulunmasi gerekiyor.
+    """
+    result = {
+        "year": year,
+        "status": status,
+        "path": None,
+        "image_path": None,
+        "rgb_path": None,
+        "ndvi_path": None,
+    }
+    result.update(extra)
+    return result
+
+
 def _mock_satellite_results(lat, lon, years):
-    results = []
-    for year in years:
-        results.append({
-            "year": year,
-            "status": "demo",
-            "path": None,
-            "image_path": None,
-            "rgb_path": None,
-            "ndvi_path": None,
-            "note": f"Demo verisi - GEE yetkisi gerekli ({lat}, {lon})",
-        })
-    return results
+    return [
+        _empty_result(
+            year,
+            "demo",
+            note=f"Demo verisi - GEE yetkisi gerekli ({lat}, {lon})",
+        )
+        for year in years
+    ]
 
 
 def _mock_latest_image(lat, lon):
@@ -81,7 +128,7 @@ def download_satellite_series(
     import ee
 
     if output_dir is None:
-        output_dir = str(Path(__file__).resolve().parent.parent.parent / "data" / "cache")
+        output_dir = _default_cache_dir()
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -89,6 +136,7 @@ def download_satellite_series(
     roi = point.buffer(buffer_meters).bounds()
     print(f"Koordinat: [{lat}, {lon}] | Alan: {buffer_meters * 2}m x {buffer_meters * 2}m")
 
+    slug = _coordinate_slug(lat, lon)
     results = []
 
     for year in years:
@@ -100,76 +148,68 @@ def download_satellite_series(
             .filterBounds(roi)
             .filterDate(start_date, end_date)
             .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 15))
-            .select(["B4", "B3", "B2"])
+            .select(RGB_BANDS + [NIR_BAND])
         )
 
         count = dataset.size().getInfo()
         if count == 0:
             print(f"{year}: Uygun goruntu bulunamadi, atlanıyor")
-            results.append({
-                "year": year,
-                "status": "no_data",
-                "path": None,
-                "image_path": None,
-                "rgb_path": None,
-                "ndvi_path": None,
-            })
+            results.append(_empty_result(year, "no_data"))
             continue
 
         image = dataset.median().clip(roi)
 
-        vis_params = {
-            "bands": ["B4", "B3", "B2"],
-            "min": 0,
-            "max": 3000,
-            "region": roi,
-            "dimensions": "512x512",
-            "format": "png",
-        }
-
         try:
-            url = image.getThumbURL(vis_params)
-            response = requests.get(url, timeout=60)
-            response.raise_for_status()
-
-            file_path = os.path.join(output_dir, f"region_{year}.png")
-            with open(file_path, "wb") as f:
-                f.write(response.content)
-
-            print(f"{year} indirildi: {file_path}")
-            results.append(
+            # YOLO bu RGB goruntusu uzerinde calisiyor
+            rgb_path = os.path.join(output_dir, f"region_{slug}_{year}_rgb.png")
+            _download_thumb(
+                image,
                 {
-                    "year": year,
-                    "status": "ok",
-                    "path": file_path,
-                    "image_path": file_path,
-                }
+                    "bands": RGB_BANDS,
+                    "min": 0,
+                    "max": 3000,
+                    "region": roi,
+                    "dimensions": THUMB_SIZE,
+                    "format": "png",
+                },
+                rgb_path,
+            )
+
+            # NDVI bandi ayri bir gri tonlamali PNG olarak indiriliyor;
+            # NdviService bu dosyayi okuyup -1..1 araligina geri olcekliyor
+            ndvi_image = image.normalizedDifference([NIR_BAND, RGB_BANDS[0]]).rename("NDVI")
+            ndvi_path = os.path.join(output_dir, f"region_{slug}_{year}_ndvi.png")
+            _download_thumb(
+                ndvi_image,
+                {
+                    "bands": ["NDVI"],
+                    "min": -1,
+                    "max": 1,
+                    "region": roi,
+                    "dimensions": THUMB_SIZE,
+                    "format": "png",
+                },
+                ndvi_path,
+            )
+
+            print(f"{year} indirildi: {rgb_path} + {ndvi_path}")
+            results.append(
+                _empty_result(
+                    year,
+                    "ok",
+                    path=rgb_path,
+                    image_path=rgb_path,
+                    rgb_path=rgb_path,
+                    ndvi_path=ndvi_path,
+                )
             )
 
         except requests.exceptions.RequestException as e:
             print(f"{year} indirme hatasi: {e}")
-            results.append(
-                {
-                    "year": year,
-                    "status": "download_error",
-                    "path": None,
-                    "image_path": None,
-                    "rgb_path": None,
-                    "ndvi_path": None,
-                }
-            )
+            results.append(_empty_result(year, "download_error"))
         except Exception as e:
             print(f"{year} genel hata: {e}")
-            results.append(
-                {
-                    "year": year,
-                    "status": "error",
-                    "path": None,
-                    "image_path": None,
-                    "rgb_path": None,
-                    "ndvi_path": None,
-                }
-            )
+            results.append(_empty_result(year, "error"))
 
     return results
 
