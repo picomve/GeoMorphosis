@@ -35,6 +35,13 @@ services:
       - NEXT_PUBLIC_AI_ENGINE_URL=http://ai-engine:8000
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      # ai-engine ile ayni SQLite dosyasi (./data:/app/data mount'u)
+      - DATABASE_URL=file:./data/geopulse.db
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - EMAIL_FROM=${SMTP_USER}
     depends_on:
       - ai-engine
 

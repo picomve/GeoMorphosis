@@ -1,6 +1,15 @@
-import prisma from '@/lib/prisma';
-
 const TELEGRAM_API = 'https://api.telegram.org';
+
+/**
+ * Prisma istemcisini yalnizca gercekten veritabanina gidilecegi zaman yukler.
+ * Statik import, sadece sayisal chat id kullanan cagri yollarini da (ornegin
+ * /api/analyze) @prisma/adapter-better-sqlite3'e ve DATABASE_URL'e bagimli
+ * hale getiriyordu.
+ */
+async function getPrisma() {
+  const mod = await import('@/lib/prisma');
+  return mod.default;
+}
 
 /**
  * Verilen degeri Telegram chat id'sine cevirir.
@@ -17,6 +26,7 @@ async function resolveChatId(chatIdOrUserId) {
   }
 
   try {
+    const prisma = await getPrisma();
     const user = await prisma.regions_analysis.findUnique({
       where: { user_id: String(chatIdOrUserId) },
       select: { telegram_chat_id: true },
@@ -31,6 +41,7 @@ async function resolveChatId(chatIdOrUserId) {
 
 export async function linkTelegramAccount(userId, chatId) {
   try {
+    const prisma = await getPrisma();
     const updatedUser = await prisma.regions_analysis.update({
       where: {
         user_id: userId,
