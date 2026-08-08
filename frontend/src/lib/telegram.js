@@ -1,11 +1,34 @@
-export async function sendTelegramNotification(chatId,message, title = 'Sistem Bildirimi') {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+import prisma from '@/lib/prisma';
 
-  if (!token || !chatId || token.includes('your_')) {
-    console.warn('Telegram konfigürasyonu eksik, bildirim atlanıyor.');
-    return false;
+const TELEGRAM_API = 'https://api.telegram.org';
+
+/**
+ * Verilen degeri Telegram chat id'sine cevirir.
+ * Sayisal bir deger geldiyse dogrudan chat id kabul edilir,
+ * aksi halde regions_analysis.user_id uzerinden telegram_chat_id cozulur.
+ */
+async function resolveChatId(chatIdOrUserId) {
+  if (chatIdOrUserId === null || chatIdOrUserId === undefined || chatIdOrUserId === '') {
+    return null;
+  }
+
+  if (/^-?\d+$/.test(String(chatIdOrUserId))) {
+    return String(chatIdOrUserId);
+  }
+
+  try {
+    const user = await prisma.regions_analysis.findUnique({
+      where: { user_id: String(chatIdOrUserId) },
+      select: { telegram_chat_id: true },
+    });
+
+    return user?.telegram_chat_id ?? null;
+  } catch (error) {
+    console.error('Telegram chat id cozumleme hatasi:', error);
+    return null;
   }
 }
+
 export async function linkTelegramAccount(userId, chatId) {
   try {
     const updatedUser = await prisma.regions_analysis.update({
@@ -17,24 +40,58 @@ export async function linkTelegramAccount(userId, chatId) {
       },
     });
 
-    console.log("Telegram hesabı eşleştirildi:", updatedUser);
+    console.log('Telegram hesabı eşleştirildi:', updatedUser);
     return updatedUser;
   } catch (error) {
-    console.error("Telegram hesabı eşleştirme hatası:", error);
+    console.error('Telegram hesabı eşleştirme hatası:', error);
     return null;
   }
 }
 
-export async function sendTelegramNotification(userId, message, title = 'Sistem Bildirimi') {
+/**
+ * Telegram uzerinden bildirim gonderir.
+ * @param {string|number} chatIdOrUserId Telegram chat id veya regions_analysis.user_id
+ * @returns {Promise<boolean>} gonderim basarili ise true
+ */
+export async function sendTelegramNotification(chatIdOrUserId, message, title = 'Sistem Bildirimi') {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+
+  if (!token || token.includes('your_')) {
+    console.warn('Telegram konfigürasyonu eksik, bildirim atlanıyor.');
+    return false;
+  }
+
+  if (!message) {
+    console.warn('Telegram mesaj icerigi bos, bildirim atlanıyor.');
+    return false;
+  }
+
+  const chatId = await resolveChatId(chatIdOrUserId);
+
+  if (!chatId) {
+    console.warn('Telegram alicisi bulunamadi, bildirim atlanıyor.');
+    return false;
+  }
+
   try {
-    const user = await prisma.regions_analysis.findUnique({
-      where: { user_id: userId },
-      select: { telegram_chat_id: true },
+    const response = await fetch(`${TELEGRAM_API}/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: `${title}\n\n${message}`,
+      }),
     });
 
-    return user;
+    if (!response.ok) {
+      const detail = await response.text();
+      console.error('Telegram bildirim gönderme hatası:', response.status, detail);
+      return false;
+    }
+
+    return true;
   } catch (error) {
-    console.error("Telegram bildirim gönderme hatası:", error);
-    return null;
+    console.error('Telegram bildirim gönderme hatası:', error);
+    return false;
   }
 }
