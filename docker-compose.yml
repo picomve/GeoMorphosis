@@ -52,6 +52,10 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - AI_ENGINE_URL=http://ai-engine:8000
+      # Erken uyari e-postasinin gidecegi adres (bos ise SMTP_USER kullanilir)
+      - ALERT_EMAIL_TO=${ALERT_EMAIL_TO:-}
+      # Uydu indirme + YOLO icin ust sinir (ms)
+      - ANALYSIS_TIMEOUT_MS=${ANALYSIS_TIMEOUT_MS:-180000}
     depends_on:
       - ai-engine
       - redis
