@@ -4,6 +4,11 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir --default-timeout=1000 -r requirements.txt
+
+# Kaynak kodu imaja al. docker-compose gelistirme sirasinda bu dizini
+# volume ile eziyor; bu satir imajin tek basina calisabilmesi icin gerekli.
+COPY . .
+
 EXPOSE 8000
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
