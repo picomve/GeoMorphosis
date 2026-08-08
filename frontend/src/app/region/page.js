@@ -10,6 +10,10 @@ function RegionContent() {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const aiLayerGroupRef = useRef(null); // Çakışmaları önlemek için yeni katman referansı
+  // Aynı bölge için ikinci kez iş emri vermemek üzere son istenen anahtar.
+  // React StrictMode geliştirme modunda effect'i iki kez çalıştırıyor ve her
+  // çalıştırma bir uydu indirme + YOLO turu maliyetinde.
+  const requestedKeyRef = useRef(null);
 
   const [regionData, setRegionData] = useState(null);
   const [activeTab, setActiveTab] = useState('map');
@@ -64,6 +68,23 @@ function RegionContent() {
       }, 3000); // Her 3 saniyede bir kontrol et
     };
 
+    // Vezneye (FastAPI) iş emrini ver (POST)
+    // Backend'in beklediği start_points listesine haritadaki lat/lon'u gönderiyoruz
+    const requestAnalysis = async () => {
+      const postRes = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          start_points: [{ lat, lon }],
+          end_points: [], // Eğer bitiş noktası yoksa boş liste
+          buffer_meters: 1000
+        })
+      });
+
+      const postData = await postRes.json();
+      return postData.task_id;
+    };
+
     const fetchRegion = async () => {
       try {
         setAnalysisStatus('loading');
@@ -74,20 +95,16 @@ function RegionContent() {
           return;
         }
 
-        // Vezneye (FastAPI) iş emrini ver (POST)
-        // Backend'in beklediği start_points listesine haritadaki lat/lon'u gönderiyoruz
-        const postRes = await fetch('/api/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            start_points: [{ lat, lon }],
-            end_points: [], // Eğer bitiş noktası yoksa boş liste
-            buffer_meters: 1000
-          })
-        });
+        // Aynı bölge için tek bir iş emri. StrictMode effect'i iki kez
+        // çalıştırdığında ikinci çağrı yeni POST atmak yerine ilkinin
+        // promise'ini bekleyip aynı fişle sorgulamaya başlıyor.
+        const requestKey = `${lat},${lon}`;
 
-        const postData = await postRes.json();
-        const taskId = postData.task_id;
+        if (requestedKeyRef.current?.key !== requestKey) {
+          requestedKeyRef.current = { key: requestKey, promise: requestAnalysis() };
+        }
+
+        const taskId = await requestedKeyRef.current.promise;
 
         if (!taskId) throw new Error('Task ID alınamadı');
         if (cancelled) return;
