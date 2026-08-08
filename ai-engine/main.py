@@ -2,7 +2,8 @@ import json
 import os
 import sys
 import uuid
-from datetime import datetime
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Optional
 
 import redis
@@ -17,10 +18,19 @@ from services.analysis_service import analyze_region as analyze_region_service
 from services.satellite_api import get_latest_image
 from utils.index import get_db_connection, init_db
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # on_event("startup") FastAPI'de kullanimdan kaldirilmak uzere
+    init_db()
+    yield
+
+
 app = FastAPI(
     title="GeoMorphosis AI Engine",
     description="Coğrafi Çevre İzleme ve Erken Uyarı Sistemi - Yapay Zeka Katmanı",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -112,11 +122,6 @@ def _persist_analysis(result: dict, ip_address: Optional[str]) -> Optional[int]:
         return None
 
 
-@app.on_event("startup")
-def startup_event():
-    init_db()
-
-
 @app.get("/")
 def read_root():
     return {"status": "active", "service": "GeoMorphosis AI Engine Ready"}
@@ -145,7 +150,7 @@ def queue_analysis(request: AnalyzeRequest):
         r.hset(f"task:{task_id}", mapping={
             "status": "pending",
             "payload": json.dumps(task_payload),
-            "created_at": datetime.utcnow().isoformat() + "Z",
+            "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         })
         r.rpush("taskQueue", task_id)
 
