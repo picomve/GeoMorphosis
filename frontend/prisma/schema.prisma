@@ -10,6 +10,7 @@ model periodic_subscriptions {
   id                  Int               @id @default(autoincrement())
   region_id           Int?
   notification_target String?
+  unsubscribe_token   String?           @unique
   interval_minutes    Int?              @default(120)
   last_checked_at     DateTime?         @default(now())
   is_active           Boolean?          @default(true)
