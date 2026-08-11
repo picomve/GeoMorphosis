@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import mockHeatmapData from './mockHeatmapData';
 
-// page.js'ten gelen isDarkMode bilgisini buraya alıyoruz
 export default function Map({ onRegionSelect, isDarkMode }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -43,10 +42,11 @@ export default function Map({ onRegionSelect, isDarkMode }) {
         maxZoom: 19,
       });
 
-      // 2. BİZİM EKLENTİMİZ: KARANLIK HARİTA (CartoDB Dark Matter)
-      const darkMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      // 2. ÖZEL TONLAMALI KARANLIK HARİTA (Açık siyah / Lacivert tonları)
+      const darkMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://carto.com/attributions">CARTO</a>',
         maxZoom: 19,
+        className: 'custom-dark-tiles', // index.css dosyasındaki renk filtresini buraya uyguluyoruz
       });
 
       // 3. UYDU HARİTASI
@@ -55,7 +55,7 @@ export default function Map({ onRegionSelect, isDarkMode }) {
         maxZoom: 19,
       });
 
-      // Başlangıçta gece modu aktifse karanlık haritayı, değilse normali ekle
+      // Başlangıçta gece modu aktifse özel tonlamalı karanlık haritayı ekle
       if (isDarkMode) {
         darkMap.addTo(map);
       } else {
@@ -99,7 +99,7 @@ export default function Map({ onRegionSelect, isDarkMode }) {
       mapInstanceRef.current = map;
       layersRef.current = {
         normalMap,
-        darkMap, // Karanlık haritayı referanslara ekledik
+        darkMap,
         satelliteMap,
       };
     };
@@ -114,12 +114,11 @@ export default function Map({ onRegionSelect, isDarkMode }) {
     };
   }, [onRegionSelect]);
 
-  // GECE/GÜNDÜZ MODU DEĞİŞTİĞİNDE HARİTAYI ANLIK GÜNCELLE
+  // Gece/Gündüz modu değiştiğinde haritayı anlık güncelle
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map || !layersRef.current.normalMap || !layersRef.current.darkMap) return;
     
-    // Eğer Uydu modunda DEĞİLSEK bu değişimi yap
     if (baseMap === 'normal') {
       if (isDarkMode) {
         map.removeLayer(layersRef.current.normalMap);
@@ -143,7 +142,6 @@ export default function Map({ onRegionSelect, isDarkMode }) {
       satelliteMap.addTo(map);
     } else {
       map.removeLayer(satelliteMap);
-      // Yeni durumda karanlık mod aktifse darkMap'i, değilse normalMap'i ekle
       if (isDarkMode) {
         darkMap.addTo(map);
       } else {
@@ -184,12 +182,10 @@ export default function Map({ onRegionSelect, isDarkMode }) {
 
   return (
     <div className="relative w-full h-full">
-
       <div ref={mapRef} id="map" className="w-full h-full" />
 
-      {/* Sol Taraftaki Harita Görünümü Paneli - BURAYA DARK MODE EKLENDİ */}
+      {/* Sol Harita Görünümü Paneli */}
       <div className="absolute top-24 left-4 z-[1000] bg-white/95 dark:bg-gray-800/95 backdrop-blur-md rounded-2xl shadow-xl p-4 w-64 border border-transparent dark:border-gray-700 transition-colors duration-300">
-
         <h3 className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3 transition-colors duration-300">
           Harita Görünümü
         </h3>
@@ -238,9 +234,7 @@ export default function Map({ onRegionSelect, isDarkMode }) {
             </button>
           ))}
         </div>
-
       </div>
-
     </div>
   );
 }
