@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendTelegramNotification } from '@/lib/telegram';
-
-// Bildirim alicisi: istekten gelen chat_id/user_id, yoksa ortak .env chat id'si
-function resolveRecipient(body = {}) {
-  return body.chat_id || body.user_id || process.env.TELEGRAM_CHAT_ID || null;
-}
+import { sendSystemTelegramNotification } from '@/lib/telegram';
 
 export async function POST(request) {
   try {
@@ -17,7 +12,6 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Başlangıç noktaları (start_points) gerekli' }, { status: 400 });
     }
 
-    const recipient = resolveRecipient(body);
     const aiEngineUrl = process.env.NEXT_PUBLIC_AI_ENGINE_URL || 'http://localhost:8000';
 
     // Vezne (FastAPI) için yeni payload yapımız
@@ -42,21 +36,18 @@ export async function POST(request) {
       });
       clearTimeout(timeout);
 
-      const data = await response.json(); // Burada sadece { task_id, message } dönecek
-
       if (!response.ok) {
-        return NextResponse.json(
-          { error: data?.detail || 'Vezne isteği reddetti' },
-          { status: response.status }
-        );
+        throw new Error(`AI Engine analiz baslatma hatasi: ${response.status}`);
       }
 
+      const data = await response.json(); // Burada sadece { task_id, message } dönecek
+
       const firstPoint = start_points[0];
+      // Frontend farklı isimlendirmelerle nokta gönderebiliyor
       const lon = firstPoint.lng ?? firstPoint.lon ?? firstPoint.longitude;
 
       // Telegram'a analizin BAŞLADIĞINI (kuyruğa alındığını) bildiriyoruz
-      await sendTelegramNotification(
-        recipient,
+      await sendSystemTelegramNotification(
         `📍 Koordinat: ${firstPoint.lat}, ${lon}\nYeni bir bölge analizi mutfak kuyruğuna (Redis) başarıyla eklendi.\n🎫 Fiş No: ${data.task_id}`,
         'GEO-PULSE Görev Kuyruğu'
       );
@@ -67,8 +58,7 @@ export async function POST(request) {
     } catch(error) {
       clearTimeout(timeout);
 
-      await sendTelegramNotification(
-        recipient,
+      await sendSystemTelegramNotification(
         `Vezneye (FastAPI) bağlanırken hata oluştu: ${error.message}`,
         'Sistem Bağlantı Hatası'
       );
@@ -83,7 +73,6 @@ export async function POST(request) {
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const aiEngineUrl = process.env.NEXT_PUBLIC_AI_ENGINE_URL || 'http://localhost:8000';
-  const recipient = searchParams.get('chat_id') || process.env.TELEGRAM_CHAT_ID || null;
 
   // task_id varsa Polling (Durum Sorgulama) işlemi yap
   const taskId = searchParams.get('task_id');
@@ -91,18 +80,21 @@ export async function GET(request) {
   if (taskId) {
     try {
       const response = await fetch(`${aiEngineUrl}/api/status/${taskId}`);
+
+      if (!response.ok) {
+        throw new Error(`AI Engine hata döndü: ${response.status}`);
+      }
+
       const statusData = await response.json();
 
       // Eğer mutfak analizi bitirdiyse Telegram'a müjdeyi ver
       if (statusData.status === 'completed') {
-         await sendTelegramNotification(
-           recipient,
+         await sendSystemTelegramNotification(
            `✅ Fiş No: ${taskId}\nHarita üzerinde bölge yapay zeka analizi başarıyla tamamlandı ve sonuçlar arayüze iletildi.`,
            'GEO-PULSE Analiz Raporu'
          );
       }
 
-      // Frontend'e durumu ilet (pending, processing, completed veya failed)
       return NextResponse.json(statusData);
     } catch (error) {
        return NextResponse.json({ error: 'Durum sorgulanamadı' }, { status: 500 });
@@ -126,18 +118,21 @@ export async function GET(request) {
       { signal: controller.signal }
     );
     clearTimeout(timeout);
+
+    if (!response.ok) {
+      throw new Error(`Uydu servisi hata döndü: ${response.status}`);
+    }
+
     const satelliteData = await response.json();
 
-    await sendTelegramNotification(
-      recipient,
+    await sendSystemTelegramNotification(
       `👀 Koordinat: ${lat}, ${lon}\nBölge harita üzerinde görüntülendi.`,
       'Harita Görüntüleme Raporu'
     );
 
     return NextResponse.json({ status: 'completed', satellite: satelliteData });
   } catch (error) {
-    await sendTelegramNotification(
-      recipient,
+    await sendSystemTelegramNotification(
       `Uydu servisi cevap vermediği için analiz sırasında bir hata oluştu: ${error.message}`,
       'Analiz Hatası'
     );

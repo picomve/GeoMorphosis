@@ -2,41 +2,57 @@ const TELEGRAM_API = 'https://api.telegram.org';
 
 /**
  * Prisma istemcisini yalnizca gercekten veritabanina gidilecegi zaman yukler.
- * Statik import, sadece sayisal chat id kullanan cagri yollarini da (ornegin
+ * Statik import, prisma'ya hic ihtiyaci olmayan cagri yollarini da (ornegin
  * /api/analyze) @prisma/adapter-better-sqlite3'e ve DATABASE_URL'e bagimli
- * hale getiriyordu.
+ * hale getiriyordu; `next build` bu yuzden kiriliyordu.
  */
 async function getPrisma() {
   const mod = await import('@/lib/prisma');
   return mod.default;
 }
 
-/**
- * Verilen degeri Telegram chat id'sine cevirir.
- * Sayisal bir deger geldiyse dogrudan chat id kabul edilir,
- * aksi halde regions_analysis.user_id uzerinden telegram_chat_id cozulur.
- */
-async function resolveChatId(chatIdOrUserId) {
-  if (chatIdOrUserId === null || chatIdOrUserId === undefined || chatIdOrUserId === '') {
-    return null;
-  }
-
-  if (/^-?\d+$/.test(String(chatIdOrUserId))) {
-    return String(chatIdOrUserId);
-  }
-
+async function postMessage(token, chatId, message, title) {
   try {
-    const prisma = await getPrisma();
-    const user = await prisma.regions_analysis.findUnique({
-      where: { user_id: String(chatIdOrUserId) },
-      select: { telegram_chat_id: true },
+    const response = await fetch(`${TELEGRAM_API}/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: `<b>${title}</b>\n\n${message}`,
+        parse_mode: 'HTML',
+      }),
     });
 
-    return user?.telegram_chat_id ?? null;
+    return response.ok;
   } catch (error) {
-    console.error('Telegram chat id cozumleme hatasi:', error);
-    return null;
+    console.error('Telegram bildirim hatası:', error);
+    return false;
   }
+}
+
+/** Belirli bir sohbete bildirim gonderir. */
+export async function sendTelegramNotification(chatId, message, title = 'Sistem Bildirimi') {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+
+  if (!token || !chatId || token.includes('your_')) {
+    console.warn('Telegram konfigürasyonu eksik, bildirim atlanıyor.');
+    return false;
+  }
+
+  return postMessage(token, chatId, message, title);
+}
+
+/** Ortak .env sohbetine sistem bildirimi gonderir (alici parametresi gerekmez). */
+export async function sendSystemTelegramNotification(message, title = 'Sistem Bildirimi') {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+
+  if (!token || !chatId || token.includes('your_')) {
+    console.warn('Telegram konfigürasyonu eksik, bildirim atlanıyor.');
+    return false;
+  }
+
+  return postMessage(token, chatId, message, title);
 }
 
 export async function linkTelegramAccount(userId, chatId) {
@@ -56,53 +72,5 @@ export async function linkTelegramAccount(userId, chatId) {
   } catch (error) {
     console.error('Telegram hesabı eşleştirme hatası:', error);
     return null;
-  }
-}
-
-/**
- * Telegram uzerinden bildirim gonderir.
- * @param {string|number} chatIdOrUserId Telegram chat id veya regions_analysis.user_id
- * @returns {Promise<boolean>} gonderim basarili ise true
- */
-export async function sendTelegramNotification(chatIdOrUserId, message, title = 'Sistem Bildirimi') {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-
-  if (!token || token.includes('your_')) {
-    console.warn('Telegram konfigürasyonu eksik, bildirim atlanıyor.');
-    return false;
-  }
-
-  if (!message) {
-    console.warn('Telegram mesaj icerigi bos, bildirim atlanıyor.');
-    return false;
-  }
-
-  const chatId = await resolveChatId(chatIdOrUserId);
-
-  if (!chatId) {
-    console.warn('Telegram alicisi bulunamadi, bildirim atlanıyor.');
-    return false;
-  }
-
-  try {
-    const response = await fetch(`${TELEGRAM_API}/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: `${title}\n\n${message}`,
-      }),
-    });
-
-    if (!response.ok) {
-      const detail = await response.text();
-      console.error('Telegram bildirim gönderme hatası:', response.status, detail);
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    console.error('Telegram bildirim gönderme hatası:', error);
-    return false;
   }
 }
