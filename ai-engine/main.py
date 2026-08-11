@@ -57,7 +57,7 @@ def startup_event():
 def read_root():
     return {"status": "active", "service": "GeoMorphosis AI Engine Ready"}
 
-@app.post("/analyze")
+@app.post("/api/analyze")
 def analyze_region(request: AnalyzeRequest, req: Request):
     try:
         if not request.start_points:
