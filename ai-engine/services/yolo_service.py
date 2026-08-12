@@ -4,8 +4,10 @@ from pathlib import Path
 AI_ENGINE_DIR = Path(__file__).resolve().parent.parent
 
 # Agirlik arama sirasi: fine-tune edilmis modeller once, en sonda pretrained nano.
-# train.py bu isimleri uretiyor (models/fire_yolov8_v2.pt <- runs/.../best.pt).
+# best.pt ultralytics egitiminin dogrudan ciktisi (runs/detect/*/weights/best.pt);
+# train.py ise kopyaladigi dosyayi fire_yolov8_v2.pt olarak adlandiriyor.
 CANDIDATE_WEIGHTS = [
+    AI_ENGINE_DIR / "models" / "best.pt",
     AI_ENGINE_DIR / "models" / "fire_yolov8_v2.pt",
     AI_ENGINE_DIR / "models" / "fire_yolov8.pt",
     AI_ENGINE_DIR / "yolov8n.pt",
@@ -40,6 +42,8 @@ class YoloService:
         if cls.available is not None:
             return cls.model
 
+        failures: list[str] = []
+
         for path in cls._candidate_paths():
             if not path.exists():
                 continue
@@ -49,18 +53,29 @@ class YoloService:
                 cls.model = YOLO(str(path))
                 cls.model_path = str(path)
                 cls.available = True
-                print(f"YOLO modeli yuklendi: {path}")
+                print(f"YOLO modeli yuklendi: {path} | siniflar: {cls.model.names}")
                 return cls.model
             except Exception as e:
+                failures.append(f"{path}: {e}")
                 print(f"YOLO modeli yuklenemedi ({path}): {e}")
 
         cls.model = None
         cls.model_path = None
         cls.available = False
-        print(
-            "YOLO agirligi bulunamadi. Aranan yollar: "
-            + ", ".join(str(p) for p in cls._candidate_paths())
-        )
+
+        # "Bulunamadi" ile "bulundu ama yuklenemedi" ayri sorunlar; ayni mesaji
+        # vermek yanlis yere baktiriyor (eksik sistem kutuphanesi vs eksik dosya).
+        if failures:
+            print(
+                "YOLO agirligi bulundu ancak yuklenemedi. Hatalar: "
+                + " | ".join(failures)
+            )
+        else:
+            print(
+                "YOLO agirligi bulunamadi. Aranan yollar: "
+                + ", ".join(str(p) for p in cls._candidate_paths())
+            )
+
         print("Nesne tespiti olmadan (demo modu) devam ediliyor.")
         return None
 
