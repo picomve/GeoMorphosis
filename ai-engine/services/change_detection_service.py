@@ -4,7 +4,6 @@ T1 (Önceki) ve T2 (Sonraki) tarihlerindeki NDVI ve Su kütlesi değişimlerini 
 """
 
 import numpy as np
-import cv2
 
 
 class ChangeDetectionService:
