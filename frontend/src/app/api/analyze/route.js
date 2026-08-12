@@ -4,9 +4,9 @@ import { sendSystemTelegramNotification } from '@/lib/telegram';
 export async function POST(request) {
   try {
     const body = await request.json();
-    
+
     // Artık 'coordinates' yerine 'start_points' ve 'end_points' bekliyoruz
-    const { start_points, end_points, buffer_meters } = body;
+    const { start_points, end_points, buffer_meters, region_name } = body;
 
     if (!start_points || start_points.length === 0) {
       return NextResponse.json({ error: 'Başlangıç noktaları (start_points) gerekli' }, { status: 400 });
@@ -19,6 +19,7 @@ export async function POST(request) {
       start_points,
       end_points: end_points || [],
       buffer_meters: buffer_meters || 1000,
+      region_name: region_name || null,
     };
 
     const controller = new AbortController();
@@ -26,7 +27,7 @@ export async function POST(request) {
     const timeout = setTimeout(() => controller.abort(), 5000);
 
     try {
-      // FastAPI'nin YENİ asenkron endpointine (Vezne) istek atıyoruz
+      // FastAPI'nin asenkron kuyruk endpointine (Vezne) istek atıyoruz
       const response = await fetch(`${aiEngineUrl}/api/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -34,7 +35,7 @@ export async function POST(request) {
         signal: controller.signal,
       });
       clearTimeout(timeout);
-      
+
       if (!response.ok) {
         throw new Error(`AI Engine analiz baslatma hatasi: ${response.status}`);
       }
@@ -42,10 +43,12 @@ export async function POST(request) {
       const data = await response.json(); // Burada sadece { task_id, message } dönecek
 
       const firstPoint = start_points[0];
-      
+      // Frontend farklı isimlendirmelerle nokta gönderebiliyor
+      const lon = firstPoint.lng ?? firstPoint.lon ?? firstPoint.longitude;
+
       // Telegram'a analizin BAŞLADIĞINI (kuyruğa alındığını) bildiriyoruz
       await sendSystemTelegramNotification(
-        `📍 Koordinat: ${firstPoint.lat}, ${firstPoint.lng}\nYeni bir bölge analizi mutfak kuyruğuna (Redis) başarıyla eklendi.\n🎫 Fiş No: ${data.task_id}`,
+        `📍 Koordinat: ${firstPoint.lat}, ${lon}\nYeni bir bölge analizi mutfak kuyruğuna (Redis) başarıyla eklendi.\n🎫 Fiş No: ${data.task_id}`,
         'GEO-PULSE Görev Kuyruğu'
       );
 
@@ -70,18 +73,18 @@ export async function POST(request) {
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const aiEngineUrl = process.env.NEXT_PUBLIC_AI_ENGINE_URL || 'http://localhost:8000';
-  
-  // YENİ EKLENEN KISIM: task_id varsa Polling (Durum Sorgulama) işlemi yap
+
+  // task_id varsa Polling (Durum Sorgulama) işlemi yap
   const taskId = searchParams.get('task_id');
 
   if (taskId) {
     try {
       const response = await fetch(`${aiEngineUrl}/api/status/${taskId}`);
-      
+
       if (!response.ok) {
         throw new Error(`AI Engine hata döndü: ${response.status}`);
       }
-      
+
       const statusData = await response.json();
 
       // Eğer mutfak analizi bitirdiyse Telegram'a müjdeyi ver
