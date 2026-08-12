@@ -5,7 +5,23 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir --default-timeout=1000 -r requirements.txt
 
-RUN apt-get update && apt-get install -y --no-install-recommends libexpat1 && rm -rf /var/lib/apt/lists/*
+# Calisma zamani sistem kutuphaneleri:
+#  - libexpat1: rasterio'nun tasidigi GDAL bunu ariyor, yoksa NDVI okunamiyor
+#  - libgl1/libglib2.0-0/libsm6/libxext6/libxrender-dev/libxcb1: ultralytics
+#    kendi bagimliligi olarak GUI'li opencv-python cekiyor, o da bu X11
+#    kutuphanelerini istiyor; yoksa "ImportError: libxcb.so.1" ile YOLO yuklenmiyor
+# Bilerek pip'ten SONRA duruyor: paketler hazir wheel'den kuruldugu icin
+# kurulum aninda bu kutuphanelere ihtiyac yok, boylece agir pip katmani
+# (torch/ultralytics, ~2.5 GB) onbellekte kaliyor.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libexpat1 \
+        libgl1 \
+        libglib2.0-0 \
+        libsm6 \
+        libxext6 \
+        libxrender1 \
+        libxcb1 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Kaynak kodu imaja al. docker-compose gelistirme sirasinda bu dizini
 # volume ile eziyor; bu satir imajin tek basina calisabilmesi icin gerekli.
