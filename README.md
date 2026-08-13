@@ -79,6 +79,21 @@ npm install
 REDIS_HOST=localhost AI_ENGINE_URL=http://localhost:8000 npm start
 ```
 
+
+## Geliştirme ortamında çalıştırmak 
+Geliştirme ortamında hızlıca çalıştırmak ve değişiklikler yapmak için:
+
+
+### Hızlı başlatma (venv/node_modülleri zaten kuruluysa)
+`.\dev-start.ps1` 
+veya `.\dev-start.sh` 
+
+### İndirirek başlatma (venv oluşturur, python ve node bağımlılıkları kurar)
+`.\dev-start.ps1 -Install`
+veya `.\dev-start.sh -Install`
+
+
+
 ## Docker ile Calistirma
 
 Tum zinciri (frontend + ai-engine + worker + redis) birlikte ayaga kaldirmanin
@@ -92,6 +107,26 @@ cp .env.example .env
 
 # Tum servisleri baslat
 docker-compose up --build
+```
+
+## Test etme
+
+### ai-engine (Python)
+
+```bash
+cd ai-engine && python -m pytest -q tests/
+```
+
+### worker (Node)
+
+```bash
+cd worker && npm install && node --test
+```
+
+### frontend
+
+```bash
+cd frontend && npm run test
 ```
 
 ## npm Komutlari (Frontend)
@@ -142,25 +177,6 @@ Hicbiri bulunamazsa sistem **cokmez**; nesne tespiti atlanir, risk degerleri
 yalnizca NDVI degisimine dayanir ve sonuc `model_loaded: false` ile isaretlenir.
 Agirlik dosyalari `.gitignore`'da oldugu icin repo ile birlikte gelmez.
 
-## Test etme
-
-### ai-engine (Python)
-
-```bash
-cd ai-engine && python -m pytest -q tests/
-```
-
-### worker (Node)
-
-```bash
-cd worker && npm install && node --test
-```
-
-### frontend
-
-```bash
-cd frontend && npm run test
-```
 
 ## API Endpoints
 
