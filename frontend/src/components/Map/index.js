@@ -71,7 +71,7 @@ function buildPointLayer(L, data, colorFn, label) {
   return L.layerGroup(markers);
 }
 
-export default function Map({ onRegionSelect }) {
+export default function Map({ onRegionSelect, isDarkMode }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const layersRef = useRef({});
@@ -103,18 +103,32 @@ export default function Map({ onRegionSelect }) {
         position: 'bottomleft',
       }).addTo(map);
 
+      // 1. NORMAL HARİTA
       const normalMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap',
         maxZoom: 19,
       });
 
+      // 2. ÖZEL TONLAMALI KARANLIK HARİTA
+      const darkMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://carto.com/attributions">CARTO</a>',
+        maxZoom: 19,
+        className: 'custom-dark-tiles',
+      });
+
+      // 3. UYDU HARİTASI
       const satelliteMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: 'Tiles © Esri',
         maxZoom: 19,
       });
 
-      normalMap.addTo(map);
+      if (isDarkMode) {
+        darkMap.addTo(map);
+      } else {
+        normalMap.addTo(map);
+      }
 
+      // Nokta tabanlı katmanlar (yangın / kirlilik / NDVI)
       const fireLayer = buildPointLayer(L, mockHeatmapData, getFireColor, 'Yangın Riski');
       const pollutionLayer = buildPointLayer(L, mockHeatmapData, getPollutionColor, 'Kirlilik');
       const vegetationLayer = buildPointLayer(L, mockHeatmapData, getVegetationColor, 'NDVI');
@@ -163,6 +177,7 @@ export default function Map({ onRegionSelect }) {
       mapInstanceRef.current = map;
       layersRef.current = {
         normalMap,
+        darkMap,
         satelliteMap,
         fireLayer,
         pollutionLayer,
@@ -180,18 +195,39 @@ export default function Map({ onRegionSelect }) {
     };
   }, [onRegionSelect]);
 
+  // Gece/Gündüz modu değiştiğinde haritayı anlık güncelle
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !layersRef.current.normalMap || !layersRef.current.darkMap) return;
+
+    if (baseMap === 'normal') {
+      if (isDarkMode) {
+        map.removeLayer(layersRef.current.normalMap);
+        layersRef.current.darkMap.addTo(map);
+      } else {
+        map.removeLayer(layersRef.current.darkMap);
+        layersRef.current.normalMap.addTo(map);
+      }
+    }
+  }, [isDarkMode, baseMap]);
+
   const handleBaseMapChange = (type) => {
     const map = mapInstanceRef.current;
-    const { normalMap, satelliteMap } = layersRef.current;
+    const { normalMap, darkMap, satelliteMap } = layersRef.current;
 
     if (!map || type === baseMap) return;
 
     if (type === 'satellite') {
       map.removeLayer(normalMap);
+      if (darkMap) map.removeLayer(darkMap);
       satelliteMap.addTo(map);
     } else {
       map.removeLayer(satelliteMap);
-      normalMap.addTo(map);
+      if (isDarkMode) {
+        darkMap.addTo(map);
+      } else {
+        normalMap.addTo(map);
+      }
     }
 
     setBaseMap(type);
@@ -210,13 +246,11 @@ export default function Map({ onRegionSelect }) {
 
     setActiveOverlays((prev) => {
       const next = { ...prev, [key]: !prev[key] };
-
       if (next[key]) {
         layer.addTo(map);
       } else {
         map.removeLayer(layer);
       }
-
       return next;
     });
   };
@@ -253,14 +287,19 @@ export default function Map({ onRegionSelect }) {
 
       <div ref={mapRef} id="map" className="w-full h-full" />
 
-      <div className="absolute top-24 left-4 z-[1000] bg-white/95 backdrop-blur-md rounded-2xl shadow-xl p-4 w-64">
-        <h3 className="text-sm font-bold text-gray-700 mb-3">Harita Görünümü</h3>
+      {/* Sol Harita Görünümü Paneli */}
+      <div className="absolute top-24 left-4 z-[1000] bg-white/95 dark:bg-gray-800/95 backdrop-blur-md rounded-2xl shadow-xl p-4 w-64 border border-transparent dark:border-gray-700 transition-colors duration-300">
+        <h3 className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3 transition-colors duration-300">
+          Harita Görünümü
+        </h3>
 
-        <div className="flex bg-gray-100 rounded-xl p-1 mb-4">
+        <div className="flex bg-gray-100 dark:bg-gray-900 rounded-xl p-1 mb-4 transition-colors duration-300">
           <button
             onClick={() => handleBaseMapChange('normal')}
-            className={`flex-1 text-sm font-medium py-2 rounded-lg transition ${
-              baseMap === 'normal' ? 'bg-white shadow text-gray-900' : 'text-gray-500'
+            className={`flex-1 text-sm font-medium py-2 rounded-lg transition-colors duration-300 ${
+              baseMap === 'normal'
+                ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-white'
+                : 'text-gray-500 dark:text-gray-400'
             }`}
           >
             Normal
@@ -268,25 +307,29 @@ export default function Map({ onRegionSelect }) {
 
           <button
             onClick={() => handleBaseMapChange('satellite')}
-            className={`flex-1 text-sm font-medium py-2 rounded-lg transition ${
-              baseMap === 'satellite' ? 'bg-white shadow text-gray-900' : 'text-gray-500'
+            className={`flex-1 text-sm font-medium py-2 rounded-lg transition-colors duration-300 ${
+              baseMap === 'satellite'
+                ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-white'
+                : 'text-gray-500 dark:text-gray-400'
             }`}
           >
             Uydu
           </button>
         </div>
 
-        <h3 className="text-sm font-bold text-gray-700 mb-3">Katmanlar</h3>
+        <h3 className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3 transition-colors duration-300">
+          Katmanlar
+        </h3>
 
         <div className="space-y-2">
           {overlayOptions.map((option) => (
             <button
               key={option.key}
               onClick={() => handleOverlayToggle(option.key)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition ${
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-colors duration-300 ${
                 activeOverlays[option.key]
-                  ? 'bg-gray-900 text-white'
-                  : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                  ? 'bg-gray-900 dark:bg-gray-600 text-white'
+                  : 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
               }`}
             >
               <span className={`w-3 h-3 rounded-full ${option.color}`} />
@@ -295,7 +338,7 @@ export default function Map({ onRegionSelect }) {
           ))}
         </div>
 
-        <div className="mt-4 pt-3 border-t border-gray-100">
+        <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
           <p className="text-[11px] uppercase tracking-wide text-gray-400 mb-2">
             Yoğunluk
           </p>

@@ -1,15 +1,19 @@
-import prisma from '@/lib/prisma'
+const TELEGRAM_API = 'https://api.telegram.org';
 
-export async function sendTelegramNotification(chatId, message, title = 'Sistem Bildirimi') {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+/**
+ * Prisma istemcisini yalnizca gercekten veritabanina gidilecegi zaman yukler.
+ * Statik import, prisma'ya hic ihtiyaci olmayan cagri yollarini da (ornegin
+ * /api/analyze) @prisma/adapter-better-sqlite3'e ve DATABASE_URL'e bagimli
+ * hale getiriyordu; `next build` bu yuzden kiriliyordu.
+ */
+async function getPrisma() {
+  const mod = await import('@/lib/prisma');
+  return mod.default;
+}
 
-  if (!token || !chatId || token.includes('your_')) {
-    console.warn('Telegram konfigürasyonu eksik, bildirim atlanıyor.');
-    return false;
-  }
-
+async function postMessage(token, chatId, message, title) {
   try {
-    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const response = await fetch(`${TELEGRAM_API}/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -26,25 +30,19 @@ export async function sendTelegramNotification(chatId, message, title = 'Sistem 
   }
 }
 
-export async function linkTelegramAccount(userId, chatId) {
-  try {
-    const updatedUser = await prisma.regions_analysis.update({
-      where: {
-        user_id: userId,
-      },
-      data: {
-        telegram_chat_id: String(chatId),
-      },
-    });
+/** Belirli bir sohbete bildirim gonderir. */
+export async function sendTelegramNotification(chatId, message, title = 'Sistem Bildirimi') {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
 
-    console.log("Telegram hesabı eşleştirildi:", updatedUser);
-    return updatedUser;
-  } catch (error) {
-    console.error("Telegram hesabı eşleştirme hatası:", error);
-    return null;
+  if (!token || !chatId || token.includes('your_')) {
+    console.warn('Telegram konfigürasyonu eksik, bildirim atlanıyor.');
+    return false;
   }
+
+  return postMessage(token, chatId, message, title);
 }
 
+/** Ortak .env sohbetine sistem bildirimi gonderir (alici parametresi gerekmez). */
 export async function sendSystemTelegramNotification(message, title = 'Sistem Bildirimi') {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -54,20 +52,49 @@ export async function sendSystemTelegramNotification(message, title = 'Sistem Bi
     return false;
   }
 
+  return postMessage(token, chatId, message, title);
+}
+
+/**
+ * Kullanici kimliginden (regions_analysis.user_id) chat id'yi cozup bildirim gonderir.
+ * Telegram webhook'u /start ile eslestirdigi chat id'yi bu tabloya yaziyor.
+ */
+export async function sendTelegramNotificationToUser(userId, message, title = 'Sistem Bildirimi') {
   try {
-    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: `<b>${title}</b>\n\n${message}`,
-        parse_mode: 'HTML',
-      }),
+    const prisma = await getPrisma();
+    const user = await prisma.regions_analysis.findUnique({
+      where: { user_id: userId },
+      select: { telegram_chat_id: true },
     });
 
-    return response.ok;
-  } catch (error) {
-    console.error('Sistem Telegram bildirim hatası:', error);
+    if (user?.telegram_chat_id) {
+      return sendTelegramNotification(user.telegram_chat_id, message, title);
+    }
+
+    console.warn('Kullanicinin Telegram hesabi eslestirilmemis, bildirim atlanıyor.');
     return false;
+  } catch (error) {
+    console.error('Telegram bildirim gönderme hatası:', error);
+    return false;
+  }
+}
+
+export async function linkTelegramAccount(userId, chatId) {
+  try {
+    const prisma = await getPrisma();
+    const updatedUser = await prisma.regions_analysis.update({
+      where: {
+        user_id: userId,
+      },
+      data: {
+        telegram_chat_id: String(chatId),
+      },
+    });
+
+    console.log('Telegram hesabı eşleştirildi:', updatedUser);
+    return updatedUser;
+  } catch (error) {
+    console.error('Telegram hesabı eşleştirme hatası:', error);
+    return null;
   }
 }

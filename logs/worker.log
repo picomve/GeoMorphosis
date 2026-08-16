@@ -1,0 +1,7 @@
+
+> geomorphosis-worker@1.0.0 start
+> node index.js
+
+Geomorphosis Worker (Mutfak) Redis'e bağlandı. Yeni analiz görevleri bekleniyor...
+AI Engine adresi: http://localhost:8000
+^C
