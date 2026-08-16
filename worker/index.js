@@ -2,7 +2,7 @@ const { createClient } = require('redis');
 const notifier = require('./services/notifier');
 
 // Docker-compose üzerinden gelen Redis adresini alıyoruz
-const redisHost = process.env.REDIS_HOST || 'redis';
+const redisHost = process.env.REDIS_HOST || 'localhost';
 const redisPort = process.env.REDIS_PORT || 6379;
 
 const redisClient = createClient({
