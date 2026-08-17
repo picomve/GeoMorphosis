@@ -5,20 +5,32 @@ export async function POST(request) {
   try {
     const body = await request.json();
     
-    // Artık 'coordinates' yerine 'start_points' ve 'end_points' bekliyoruz
-    const { start_points, end_points, buffer_meters } = body;
+    // 'start_points' ve 'end_points' ile birlikte haritadan gelen 'bbox', 'geoJson' ve 'lat/lng' parametrelerini yakalıyoruz
+    let { start_points, end_points, buffer_meters, bbox, geoJson, lat, lng } = body;
+
+    // Geriye dönük uyumluluk: Eğer start_points doğrudan gelmediyse lat/lng veya bbox merkezinden türet
+    if ((!start_points || start_points.length === 0) && lat !== undefined && lng !== undefined) {
+      start_points = [{ lat, lng }];
+    } else if ((!start_points || start_points.length === 0) && bbox) {
+      start_points = [{ 
+        lat: (bbox.minLat + bbox.maxLat) / 2, 
+        lng: (bbox.minLng + bbox.maxLng) / 2 
+      }];
+    }
 
     if (!start_points || start_points.length === 0) {
-      return NextResponse.json({ error: 'Başlangıç noktaları (start_points) gerekli' }, { status: 400 });
+      return NextResponse.json({ error: 'Başlangıç noktaları (start_points) veya geçerli alan koordinatları gerekli' }, { status: 400 });
     }
 
     const aiEngineUrl = process.env.NEXT_PUBLIC_AI_ENGINE_URL || 'http://localhost:8000';
 
-    // Vezne (FastAPI) için yeni payload yapımız
+    // Vezne (FastAPI) için güncellenmiş payload yapımız (bbox ve geoJson eklendi)
     const payload = {
       start_points,
       end_points: end_points || [],
       buffer_meters: buffer_meters || 1000,
+      bbox: bbox || null,
+      geoJson: geoJson || null,
     };
 
     const controller = new AbortController();

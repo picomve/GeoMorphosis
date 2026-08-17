@@ -3,6 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import mockHeatmapData from './mockHeatmapData';
 
+// HARİTA GEZİNTİ SINIRLARI (Türkiye ve çevre bölge için örnek sınırlar)
+const RESTRICTED_BOUNDS = [
+  [35.0000, 25.0000], // Güneybatı (SouthWest)
+  [43.0000, 45.0000]  // Kuzeydoğu (NorthEast)
+];
+
 export default function Map({ onRegionSelect }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -14,10 +20,6 @@ export default function Map({ onRegionSelect }) {
     pollution: false,
     vegetation: false,
   });
-
- // src/components/Map/index.js (Sadece değişen/eklenen kısımlar)
-
-// src/components/Map/index.js (Sadece değişen/eklenen kısımlar)
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -35,13 +37,15 @@ export default function Map({ onRegionSelect }) {
 
       const map = L.map(mapRef.current, {
         zoomControl: false,
+        maxBounds: RESTRICTED_BOUNDS, // YENİ EKLENDİ: Haritadan dışarı çıkmayı engeller
+        maxBoundsViscosity: 1.0,       // YENİ EKLENDİ: Sınırda esnemeyi engeller
       }).setView([39.0, 35.0], 6);
 
       L.control.zoom({
         position: 'bottomleft',
       }).addTo(map);
 
-      // --- Katman tanımlamaları aynı kalacak (normalMap, satelliteMap, heatmap'ler) ---
+      // --- Katman tanımlamaları ---
       const normalMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap',
         maxZoom: 19,
@@ -54,18 +58,13 @@ export default function Map({ onRegionSelect }) {
 
       normalMap.addTo(map);
 
-      // Heatmap kodları burada aynen kalsın...
-      // ...
-
-      // --- YENİ EKLENEN ÇİZİM MANTIĞI ---
+      // --- ÇİZİM MANTIĞI ---
       
-      // Çizilen şekilleri tutacağımız bir katman grubu oluşturuyoruz
       const drawnItems = new L.FeatureGroup();
       map.addLayer(drawnItems);
 
-      // Çizim aracının (toolbar) ayarları
       const drawControl = new L.Control.Draw({
-        position: 'bottomright', // YENİ EKLENDİ: Araç çubuğunu sağ alta taşıyoruz
+        position: 'bottomright',
         edit: {
           featureGroup: drawnItems, 
         },
@@ -82,43 +81,44 @@ export default function Map({ onRegionSelect }) {
 
       // Çizim tamamlandığında tetiklenecek olay
       map.on(L.Draw.Event.CREATED, (e) => {
-        // Eğer her seferinde sadece tek bir alan seçilmesini istiyorsak, 
-        // yeni çizim yapıldığında öncekileri temizleyebiliriz:
         drawnItems.clearLayers(); 
 
         const layer = e.layer;
         drawnItems.addLayer(layer);
 
-        // Şekli GeoJSON formatına dönüştürüyoruz (FR-1 görevinin kalbi)
         const geoJsonData = layer.toGeoJSON();
-        console.log("Üretilen GeoJSON Verisi:", geoJsonData);
+        const bounds = layer.getBounds();
+        const center = bounds.getCenter();
 
-        // Üst bileşene (page.js) bu veriyi gönderiyoruz
-        // Analiz API'miz şimdilik merkez noktası (lat, lng) bekliyor olabilir, 
-        // uyumluluğu bozmamak için merkezi de hesaplayıp gönderiyoruz.
-        const center = layer.getBounds().getCenter();
+        // YENİ EKLENDİ: AI Engine ve API köprüsü için bbox koordinatları
+        const bbox = {
+          minLat: bounds.getSouthWest().lat,
+          minLng: bounds.getSouthWest().lng,
+          maxLat: bounds.getNorthEast().lat,
+          maxLng: bounds.getNorthEast().lng,
+        };
+
+        console.log("Üretilen GeoJSON Verisi:", geoJsonData);
+        console.log("Seçilen Alan BBox Koordinatları:", bbox);
+
         onRegionSelect?.({
           geoJson: geoJsonData,
           lat: center.lat,
           lng: center.lng,
-          radius: 1000 // İleride poligonun alanına göre dinamikleştirilebilir
+          radius: 1000,
+          bbox: bbox // YENİ EKLENDİ: Kısıtlanmış alan koordinat objesi
         });
       });
-
-      // Eski `map.on('click')` ile çember çizen kodu silebilirsin.
-
-      // ----------------------------------
 
       mapInstanceRef.current = map;
       layersRef.current = {
         normalMap,
         satelliteMap,
-        // heatmap katmanları...
       };
     };
 
     initMap();
-    // ...
+
     return () => {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();

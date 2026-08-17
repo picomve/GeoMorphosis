@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Map from '@/components/Map';
 import Toast from '@/components/Toast';
@@ -13,38 +13,89 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
   const [toast, setToast] = useState(null);
+  const [taskId, setTaskId] = useState(null);
+
+  // Polling zamanlayıcısını referansta tutarak bellek sızıntısını önlüyoruz
+  const pollIntervalRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // FastAPI / Redis görev durumunu sorgulayan polling fonksiyonu
+  const startPolling = (id) => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/analyze?task_id=${id}`);
+        const statusData = await res.json();
+
+        if (statusData.status === 'completed') {
+          clearInterval(pollIntervalRef.current);
+          setAnalysisResult(statusData.result || statusData);
+          setLoading(false);
+          setToast({
+            type: 'success',
+            title: 'Analiz Tamamlandı',
+            message: 'Bölge analizi başarıyla sonuçlandı. Detayları inceleyebilirsiniz.'
+          });
+        } else if (statusData.status === 'failed') {
+          clearInterval(pollIntervalRef.current);
+          setLoading(false);
+          setToast({
+            type: 'danger',
+            title: 'Analiz Hatası',
+            message: 'Mutfak kuyruğundaki analiz işleminde hata oluştu.'
+          });
+        }
+      } catch (err) {
+        console.error('Polling hatası:', err);
+      }
+    }, 2500); // 2.5 saniyede bir sorgula
+  };
 
   const handleAnalyze = async () => {
     if (!selectedRegion) return;
 
     setLoading(true);
-    // Analiz başladığında bilgi bildirimi gösteriyoruz
+    setAnalysisResult(null);
+
     setToast({
       type: 'info',
       title: 'Analiz Başlatıldı',
-      message: 'Seçilen bölge için uydu verileri işleniyor, lütfen bekleyin...'
+      message: 'Seçilen kısıtlı alan görev kuyruğuna ekleniyor, lütfen bekleyin...'
     });
 
     try {
-      // GeoJSON poligonundan ilk noktayı (merkez veya başlangıç) alalım
-      // GeoJSON formatı: { geometry: { coordinates: [[[lng, lat], ...]] } }
       let lat, lng;
       
-      if (selectedRegion.type === 'Feature') {
-        const coords = selectedRegion.geometry.coordinates[0][0]; // İlk noktanın koordinatları
+      // Koordinat ayrıştırma (Feature, BBox veya doğrudan lat/lng)
+      if (selectedRegion.type === 'Feature' && selectedRegion.geometry) {
+        const coords = selectedRegion.geometry.coordinates[0][0];
         lng = coords[0];
         lat = coords[1];
-      } else {
-        // Fallback (Eğer direkt obje gelirse diye)
+      } else if (selectedRegion.lat !== undefined) {
         lat = selectedRegion.lat;
         lng = selectedRegion.lng || selectedRegion.lon;
+      } else if (selectedRegion.bbox) {
+        lat = (selectedRegion.bbox.minLat + selectedRegion.bbox.maxLat) / 2;
+        lng = (selectedRegion.bbox.minLng + selectedRegion.bbox.maxLng) / 2;
       }
 
-      // API'nin beklediği yeni "Vezne" payload formatı
+      // API'ye gönderilecek güncel payload (bbox ve geoJson destekli)
       const payload = {
         start_points: [{ lat, lng }],
-        end_points: [], // Şimdilik boş
-        buffer_meters: 1000,
+        end_points: [],
+        buffer_meters: selectedRegion.radius || 1000,
+        bbox: selectedRegion.bbox || null,
+        geoJson: selectedRegion.geoJson || (selectedRegion.type === 'Feature' ? selectedRegion : null),
+        lat: lat,
+        lng: lng
       };
 
       const res = await fetch('/api/analyze', {
@@ -52,7 +103,7 @@ export default function Home() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload), // Artık 'coordinates' değil 'payload' gönderiyoruz
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -60,32 +111,43 @@ export default function Home() {
       }
 
       const data = await res.json();
-      setAnalysisResult(data);
       
-      // Analiz başarıyla bittiğinde başarı bildirimi gösteriyoruz
-      setToast({
-        type: 'success',
-        title: 'Analiz Tamamlandı',
-        message: 'Bölge analizi başarıyla sonuçlandı. Detayları inceleyebilirsiniz.'
-      });
+      // Eğer asenkron Vezne yapısından task_id döndüyse polling başlat
+      if (data.task_id) {
+        setTaskId(data.task_id);
+        startPolling(data.task_id);
+      } else {
+        // Doğrudan sonuç dönen senaryo
+        setAnalysisResult(data);
+        setLoading(false);
+        setToast({
+          type: 'success',
+          title: 'Analiz Tamamlandı',
+          message: 'Bölge analizi başarıyla sonuçlandı. Detayları inceleyebilirsiniz.'
+        });
+      }
+
     } catch (err) {
       console.error('Analiz hatası:', err);
-      // Hata durumunda hata bildirimi gösteriyoruz
+      setLoading(false);
       setToast({
         type: 'danger',
         title: 'Analiz Hatası',
         message: 'Veriler işlenirken bir sorun oluştu. Lütfen tekrar deneyin.'
       });
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleDetail = () => {
     if (!selectedRegion) return;
 
-    const lat = selectedRegion.lat;
-    const lon = selectedRegion.lng || selectedRegion.lon;
+    let lat = selectedRegion.lat;
+    let lon = selectedRegion.lng || selectedRegion.lon;
+
+    if (lat === undefined && selectedRegion.bbox) {
+      lat = (selectedRegion.bbox.minLat + selectedRegion.bbox.maxLat) / 2;
+      lon = (selectedRegion.bbox.minLng + selectedRegion.bbox.maxLng) / 2;
+    }
 
     router.push(`/region?lat=${lat}&lon=${lon}`);
   };
@@ -94,13 +156,11 @@ export default function Home() {
     <main className="fixed inset-0 overflow-hidden bg-gray-100">
 
       {/* Harita - Tam ekran */}
-
       <div className="absolute inset-0 z-0">
         <Map onRegionSelect={setSelectedRegion} />
       </div>
 
       {/* Üst Menü - Haritanın üzerinde yüzen bar */}
-
       <nav className="absolute top-0 left-0 right-0 z-[1000] h-20 bg-white/90 backdrop-blur-md shadow-sm border-b border-gray-200">
         <div className="h-full px-8 flex items-center justify-between">
 
@@ -143,7 +203,6 @@ export default function Home() {
       </nav>
 
       {/* Sağ panel - Haritanın üzerinde yüzen kart */}
-
       {panelOpen && (
         <div className="absolute top-28 right-4 z-[1000] w-full max-w-sm max-h-[calc(100vh-8rem)] overflow-y-auto">
 
@@ -158,7 +217,7 @@ export default function Home() {
                 <div className="bg-gray-50 rounded-2xl p-6">
 
                   <h3 className="text-xl font-semibold mb-4">
-                    Seçilen koordinatlar
+                    Seçilen Alan / Koordinatlar
                   </h3>
 
                   <div className="space-y-4">
@@ -169,7 +228,9 @@ export default function Home() {
                       </p>
 
                       <p className="text-2xl font-bold">
-                        {selectedRegion.lat.toFixed(4)}
+                        {selectedRegion.lat?.toFixed(4) || 
+                         ((selectedRegion.bbox?.minLat + selectedRegion.bbox?.maxLat) / 2)?.toFixed(4) || 
+                         '-'}
                       </p>
                     </div>
 
@@ -181,10 +242,19 @@ export default function Home() {
                       <p className="text-2xl font-bold">
                         {(
                           selectedRegion.lng ||
-                          selectedRegion.lon
-                        ).toFixed(4)}
+                          selectedRegion.lon ||
+                          ((selectedRegion.bbox?.minLng + selectedRegion.bbox?.maxLng) / 2)
+                        )?.toFixed(4) || '-'}
                       </p>
                     </div>
+
+                    {selectedRegion.bbox && (
+                      <div className="pt-2 border-t border-gray-200">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                          Kısıtlı Alan (BBox) Aktif
+                        </span>
+                      </div>
+                    )}
 
                   </div>
 
@@ -196,13 +266,13 @@ export default function Home() {
                   className="w-full bg-blue-600 text-white py-5 rounded-2xl text-xl font-semibold hover:bg-blue-700 transition disabled:opacity-60"
                 >
                   {loading
-                    ? 'Analiz yapılıyor...'
+                    ? 'Yapay Zeka Analiz Ediyor...'
                     : 'AI Analizini Başlat'}
                 </button>
               </>
             ) : (
               <div className="bg-gray-50 rounded-2xl p-6 text-gray-500">
-                Harita üzerinden bir bölge seçin.
+                Harita üzerindeki çizim aracıyla bir alan sınırlayın veya seçin.
               </div>
             )}
 

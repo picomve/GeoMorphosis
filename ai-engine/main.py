@@ -3,7 +3,7 @@ import os
 import sys
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import redis
 import uvicorn
@@ -32,15 +32,16 @@ app.add_middleware(
 )
 
 # Redis bağlantısı (Docker üzerinden, Node.js Worker ile haberleşmek için)
-# decode_responses=True sayesinde veriler byte yerine string olarak gelir
 r = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
 
-# Güncellenmiş Request Modeli (Frontend ekibinin kullanacağı start ve end pointler eklendi)
+# Güncellenmiş Request Modeli (Haritada kısıtlanan alan bbox ve geoJson parametreleri eklendi)
 class AnalyzeRequest(BaseModel):
-    start_points: list
-    end_points: list
+    start_points: Optional[List[Dict[str, Any]]] = []
+    end_points: Optional[List[Dict[str, Any]]] = []
     buffer_meters: int = 1000
-    years: Optional[list[int]] = None
+    years: Optional[List[int]] = None
+    bbox: Optional[Dict[str, float]] = None      # {'minLat': float, 'minLng': float, 'maxLat': float, 'maxLng': float}
+    geoJson: Optional[Dict[str, Any]] = None     # Harita çiziminden gelen poligon verisi
 
 class SubscribeRequest(BaseModel):
     email: str
@@ -57,25 +58,44 @@ def startup_event():
 def read_root():
     return {"status": "active", "service": "GeoMorphosis AI Engine Ready"}
 
+
+# Hem /analyze hem /api/analyze isteklerini karşılayacak ortak analiz fonksiyonu
 @app.post("/analyze")
+@app.post("/api/analyze")
 def analyze_region(request: AnalyzeRequest, req: Request):
     try:
-        if not request.start_points:
-            raise HTTPException(status_code=400, detail="start_points gerekli")
+        # 1. Kısıtlanan alan (bbox) kontrolü ve doğrulaması
+        if request.bbox:
+            min_lat = request.bbox.get("minLat")
+            max_lat = request.bbox.get("maxLat")
+            min_lng = request.bbox.get("minLng")
+            max_lng = request.bbox.get("maxLng")
+            
+            if min_lat is not None and max_lat is not None and min_lng is not None and max_lng is not None:
+                if min_lat >= max_lat or min_lng >= max_lng:
+                    raise HTTPException(status_code=400, detail="Geçersiz kısıtlanmış alan koordinatları (bbox).")
 
-        first_point = request.start_points[0]
-        lat = first_point.get("lat") or first_point.get("latitude")
-        lon = first_point.get("lon") or first_point.get("lng") or first_point.get("longitude")
+        # 2. Nokta verisi kontrolü
+        if not request.start_points and not request.bbox:
+            raise HTTPException(status_code=400, detail="Analiz için start_points veya kısıtlanmış alan (bbox) gereklidir")
 
-        if lat is None or lon is None:
-            raise HTTPException(status_code=400, detail="start_points içindeki ilk nokta lat ve lon içermeli")
+        # start_points varsa ilk noktayı doğrula
+        if request.start_points:
+            first_point = request.start_points[0]
+            lat = first_point.get("lat") or first_point.get("latitude")
+            lon = first_point.get("lon") or first_point.get("lng") or first_point.get("longitude")
+
+            if lat is None or lon is None:
+                raise HTTPException(status_code=400, detail="start_points içindeki ilk nokta lat ve lon içermelidir")
 
         task_id = uuid.uuid4().hex
         task_payload = {
-            "start_points": request.start_points,
-            "end_points": request.end_points,
+            "start_points": request.start_points or [],
+            "end_points": request.end_points or [],
             "buffer_meters": request.buffer_meters,
             "years": request.years or [],
+            "bbox": request.bbox,
+            "geoJson": request.geoJson,
         }
 
         r.hset(f"task:{task_id}", mapping={
@@ -91,8 +111,8 @@ def analyze_region(request: AnalyzeRequest, req: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # --- DURUM SORGULAMA ENDPOINT'İ ---
-# Frontend'in polling (sürekli sorgulama) yaparak analiz sonucunu alacağı yer.
 @app.get("/api/status/{task_id}")
 def get_status(task_id: str):
     task = r.hgetall(f"task:{task_id}")
@@ -102,7 +122,10 @@ def get_status(task_id: str):
 
     # Eğer görev tamamlanmışsa Node.js Worker'dan gelen stringified JSON result'u objeye çevir
     if task.get("status") == "completed" and "result" in task:
-        task["result"] = json.loads(task["result"])
+        try:
+            task["result"] = json.loads(task["result"])
+        except Exception:
+            pass
 
     return task
 

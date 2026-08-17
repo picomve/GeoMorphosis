@@ -1,3 +1,4 @@
+import math
 from datetime import datetime, timezone
 from typing import Any
 
@@ -19,7 +20,46 @@ def _severity_for_lake_shrinkage(shrinkage_percentage: float) -> str:
     return "HIGH" if shrinkage_percentage > 5 else "NORMAL"
 
 
-def analyze_region(lat: float, lon: float, buffer_meters: int = 1000, years: list[int] | None = None) -> dict[str, Any]:
+def _calculate_bbox_metrics(bbox: dict[str, float]) -> tuple[float, float, int]:
+    """
+    Kısıtlanan bbox alanından merkez (lat, lon) ve yaklaşık buffer_meters yarıçapını hesaplar.
+    """
+    min_lat = bbox["minLat"]
+    max_lat = bbox["maxLat"]
+    min_lng = bbox["minLng"]
+    max_lng = bbox["maxLng"]
+
+    center_lat = (min_lat + max_lat) / 2.0
+    center_lon = (min_lng + max_lng) / 2.0
+
+    # Haversine yaklaşımıyla köşe mesafesi hesabı (metre cinsinden)
+    lat_diff_m = (max_lat - min_lat) * 111320
+    lng_diff_m = (max_lng - min_lng) * 111320 * math.cos(math.radians(center_lat))
+    calculated_radius = int(math.sqrt(lat_diff_m**2 + lng_diff_m**2) / 2.0)
+
+    # Minimum 500m, maksimum 10000m sınır koruması
+    buffer_meters = max(500, min(calculated_radius, 10000))
+    return center_lat, center_lon, buffer_meters
+
+
+def analyze_region(
+    lat: float | None = None,
+    lon: float | None = None,
+    buffer_meters: int = 1000,
+    years: list[int] | None = None,
+    bbox: dict[str, float] | None = None,
+    geoJson: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    # Eğer doğrudan bbox alanı geldiyse merkez ve alan yarıçapını otomatik hesapla
+    if bbox:
+        calculated_lat, calculated_lon, calculated_buffer = _calculate_bbox_metrics(bbox)
+        lat = calculated_lat if lat is None else lat
+        lon = calculated_lon if lon is None else lon
+        buffer_meters = calculated_buffer if buffer_meters == 1000 else buffer_meters
+
+    if lat is None or lon is None:
+        raise ValueError("Analiz için enlem/boylam (lat/lon) veya kısıtlanmış alan (bbox) gereklidir.")
+
     results = download_satellite_series(
         lat=lat,
         lon=lon,
@@ -91,6 +131,12 @@ def analyze_region(lat: float, lon: float, buffer_meters: int = 1000, years: lis
                     water_res["shrinkage_percentage"]
                 ),
             },
+        },
+        "restricted_area": {
+            "bbox": bbox,
+            "center": {"lat": lat, "lon": lon},
+            "buffer_meters": buffer_meters,
+            "has_geojson": geoJson is not None,
         },
     }
 
