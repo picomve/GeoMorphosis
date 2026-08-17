@@ -1,6 +1,9 @@
 {
   "dependencies": {
-    "@prisma/client": "^7.9.0"
+    "@prisma/adapter-better-sqlite3": "^7.9.1",
+    "@prisma/client": "^7.9.0",
+    "better-sqlite3": "^13.0.3",
+    "leaflet.heat": "^0.2.0"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

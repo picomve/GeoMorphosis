@@ -10,8 +10,10 @@
     "test": "node --test --experimental-default-type=module tests/**/*.test.js"
   },
   "dependencies": {
+    "@prisma/adapter-better-sqlite3": "^7.9.1",
     "@prisma/client": "^7.9.0",
     "axios": "^1.7.2",
+    "better-sqlite3": "^13.0.3",
     "bootstrap": "^5.3.3",
     "chart.js": "^4.4.3",
     "jspdf": "^2.5.1",
@@ -20,6 +22,7 @@
     "leaflet.heat": "^0.2.0",
     "lucide-react": "^1.28.0",
     "next": "14.2.5",
+    "nodemailer": "^9.0.5",
     "react": "^18.3.1",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.3.1",

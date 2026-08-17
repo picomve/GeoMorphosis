@@ -1,11 +1,14 @@
 import numpy as np
-import rasterio
 
 
 class NdviService:
     @staticmethod
     def calculate_ndvi(image_path: str) -> np.ndarray:
         """NDVI png veya çok bantlı uydu görüntüsünden NDVI matrisini hesaplar."""
+        # rasterio agir bir GDAL bagimliligi; sadece gercekten goruntu okunurken
+        # yuklensin ki analiz zinciri kurulu olmayan ortamlarda da import edilebilsin.
+        import rasterio
+
         with rasterio.open(image_path) as src:
             array = src.read().astype("float32")
 

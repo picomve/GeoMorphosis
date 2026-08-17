@@ -2,7 +2,11 @@ import sqlite3
 import os
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, "data")
+
+# Docker'da ai-engine /app altinda calisir ve ./data:/app/data mount'u
+# frontend ile ayni veritabanini gosterir. Docker disinda calisirken
+# ortak dosyayi gostermek icin GEOMORPHOSIS_DATA_DIR kullanilabilir.
+DATA_DIR = os.environ.get("GEOMORPHOSIS_DATA_DIR") or os.path.join(BASE_DIR, "data")
 DB_PATH = os.path.join(DATA_DIR, "geopulse.db")
 
 
