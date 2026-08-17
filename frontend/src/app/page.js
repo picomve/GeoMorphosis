@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Sun, Moon, Send, Info } from 'lucide-react';
 import Map from '@/components/Map';
 import Toast from '@/components/Toast';
+import { getUserId } from '@/lib/userId';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -107,6 +108,7 @@ export default function Home() {
         start_points: [coordinates],
         end_points: [],
         buffer_meters: selectedRegion.radius || 1000,
+        user_id: getUserId(), // Kullanıcı kimliğini gönderiyoruz
       };
 
       const res = await fetch('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -148,10 +150,46 @@ export default function Home() {
 
           <div className="flex items-center gap-3 md:gap-4">
             <p className="text-xl text-gray-500 dark:text-gray-400 hidden lg:block pr-4">Uydu Analiz Sistemi</p>
-            <button onClick={() => setIsAboutOpen(true)} className="flex items-center gap-2 p-2.5 rounded-full md:rounded-xl bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-800/50 transition shadow-sm border border-purple-100 dark:border-purple-800" title="Hakkımızda"><Info size={20} /><span className="hidden md:block text-sm font-bold pr-1">Hakkımızda</span></button>
-            <button onClick={() => alert('Telegram botuna bağlanma işlemi başlatılacak!')} className="flex items-center gap-2 p-2.5 rounded-full md:rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/50 transition shadow-sm border border-blue-100 dark:border-blue-800" title="Telegram Bildirimlerini Aç"><Send size={20} /><span className="hidden md:block text-sm font-bold pr-1">Telegram</span></button>
-            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-3 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-yellow-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition shadow-sm" title={isDarkMode ? 'Gündüz Moduna Geç' : 'Gece Moduna Geç'}>{isDarkMode ? <Sun size={20} /> : <Moon size={20} />}</button>
-            <button onClick={() => setPanelOpen((prev) => !prev)} className="bg-gray-900 dark:bg-gray-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-black dark:hover:bg-gray-600 transition">{panelOpen ? 'Gizle' : 'Göster'}</button>
+
+            {/* HAKKIMIZDA BUTONU */}
+            <button
+              onClick={() => setIsAboutOpen(true)}
+              className="flex items-center gap-2 p-2.5 rounded-full md:rounded-xl bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-800/50 transition shadow-sm border border-purple-100 dark:border-purple-800"
+              title="Hakkımızda"
+            >
+              <Info size={20} />
+              <span className="hidden md:block text-sm font-bold pr-1">Hakkımızda</span>
+            </button>
+
+            {/* TELEGRAM BOTU BUTONU */}
+            <button
+              onClick={() => {
+                const userId = getUserId();
+                window.open(`https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME}?start=${userId}`, '_blank');
+              }}
+              className="flex items-center gap-2 p-2.5 rounded-full md:rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/50 transition shadow-sm border border-blue-100 dark:border-blue-800"
+              title="Telegram Bildirimlerini Aç"
+            >
+              <Send size={20} />
+              <span className="hidden md:block text-sm font-bold pr-1">Telegram</span>
+            </button>
+
+            {/* GECE/GÜNDÜZ BUTONU */}
+            <button
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className="p-3 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-yellow-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition shadow-sm"
+              title={isDarkMode ? 'Gündüz Moduna Geç' : 'Gece Moduna Geç'}
+            >
+              {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+
+            {/* PANEL GİZLE/GÖSTER BUTONU */}
+            <button
+              onClick={() => setPanelOpen((prev) => !prev)}
+              className="bg-gray-900 dark:bg-gray-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-black dark:hover:bg-gray-600 transition"
+            >
+              {panelOpen ? 'Gizle' : 'Göster'}
+            </button>
           </div>
         </div>
       </nav>
