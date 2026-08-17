@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Sun, Moon, Send, Info } from 'lucide-react';
 import Map from '@/components/Map';
 import Toast from '@/components/Toast';
+import { getUserId } from '@/lib/userId';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -143,6 +144,7 @@ export default function Home() {
         start_points: [coordinates],
         end_points: [],
         buffer_meters: selectedRegion.radius || 1000,
+        user_id: getUserId(), // Kullanıcı kimliğini gönderiyoruz
       };
 
       const res = await fetch('/api/analyze', {
@@ -233,7 +235,10 @@ export default function Home() {
 
             {/* TELEGRAM BOTU BUTONU */}
             <button
-              onClick={() => alert('Telegram botuna bağlanma işlemi başlatılacak!')}
+              onClick={() => {
+                const userId = getUserId();
+                window.open(`https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME}?start=${userId}`, '_blank');
+              }}
               className="flex items-center gap-2 p-2.5 rounded-full md:rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/50 transition shadow-sm border border-blue-100 dark:border-blue-800"
               title="Telegram Bildirimlerini Aç"
             >

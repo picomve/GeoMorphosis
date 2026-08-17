@@ -82,11 +82,15 @@ export async function sendTelegramNotificationToUser(userId, message, title = 'S
 export async function linkTelegramAccount(userId, chatId) {
   try {
     const prisma = await getPrisma();
-    const updatedUser = await prisma.regions_analysis.update({
+    const updatedUser = await prisma.regions_analysis.upsert({
       where: {
         user_id: userId,
       },
-      data: {
+      update: {
+        telegram_chat_id: String(chatId),
+      },
+      create: {
+        user_id: userId,
         telegram_chat_id: String(chatId),
       },
     });
