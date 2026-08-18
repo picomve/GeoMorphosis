@@ -53,6 +53,17 @@ data/cache/*
 # Egitilmis agirliklar (ai-engine/models/*.pt) bilerek repoda tutuluyor;
 # ekibin modeli calistirabilmesi icin gerekli.
 ai-engine/Mehmet-yolo/
+
+# Ultralytics'in otomatik indirdigi pretrained agirliklar - repoda tutulmamali,
+# gerektiginde kendiliginden iniyorlar.
+/yolo*.pt
+
+# Egitim ciktilarindaki agirliklar (grafik/csv kayitlari kalsin, .pt'ler girmesin)
+runs/**/weights/
+ai-engine/runs/
+
+# Lokal calistirma loglari
+logs/
 # database
 *.db
 *.sqlite
@@ -78,7 +89,6 @@ dataset/
 
 # Veritabanı ve büyük dosyalar
 *.db
-ai-engine/runs/
 
 # Hassas API anahtarı
 gee-key.json
