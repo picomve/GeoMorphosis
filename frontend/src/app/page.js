@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Sun, Moon, Send, Info } from 'lucide-react';
+import { Sun, Moon, Send, Info, Bell, Mail, Monitor, X } from 'lucide-react';
 import Map from '@/components/Map';
 import Toast from '@/components/Toast';
 import { getUserId } from '@/lib/userId';
@@ -45,6 +45,11 @@ export default function Home() {
   const [toast, setToast] = useState(null);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+
+  // --- BİLDİRİM FORMU STATELERİ ---
+  const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
+  const [notifEmail, setNotifEmail] = useState('');
+  const [webPushStatus, setWebPushStatus] = useState(false);
 
   const pollRef = useRef(null);
 
@@ -108,7 +113,7 @@ export default function Home() {
         start_points: [coordinates],
         end_points: [],
         buffer_meters: selectedRegion.radius || 1000,
-        user_id: getUserId(), // Kullanıcı kimliğini gönderiyoruz
+        user_id: getUserId(),
       };
 
       const res = await fetch('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -132,6 +137,35 @@ export default function Home() {
     router.push(`/region?${params.toString()}`);
   };
 
+  // --- YENİ EKLENEN: E-POSTAYI ARKA PLANA (API'YE) GÖNDERME FONKSİYONU ---
+  const handleEmailSave = async () => {
+    if (!notifEmail || !notifEmail.includes('@')) {
+      setToast({ type: 'warning', title: 'Eksik Bilgi', message: 'Lütfen geçerli bir e-posta adresi girin.' });
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: notifEmail, 
+          region_id: analysisResult?.region_id || 1, // Ekibin API'si bölge ID istiyor
+          notification_type: 'email' 
+        }),
+      });
+
+      if (res.ok) {
+        setToast({ type: 'success', title: 'Bağlantı Başarılı', message: 'E-posta adresiniz sisteme başarıyla kaydedildi.' });
+      } else {
+        setToast({ type: 'danger', title: 'Hata', message: 'Sisteme kaydedilirken bir sorun oluştu.' });
+      }
+    } catch (err) {
+      console.error('E-posta kayıt hatası:', err);
+      setToast({ type: 'danger', title: 'Bağlantı Hatası', message: 'Sunucuya ulaşılamadı.' });
+    }
+  };
+
   return (
     <main className="fixed inset-0 overflow-hidden bg-gray-100 dark:bg-gray-900 transition-colors duration-300">
       <div className="absolute inset-0 z-0">
@@ -151,7 +185,6 @@ export default function Home() {
           <div className="flex items-center gap-3 md:gap-4">
             <p className="text-xl text-gray-500 dark:text-gray-400 hidden lg:block pr-4">Uydu Analiz Sistemi</p>
 
-            {/* HAKKIMIZDA BUTONU */}
             <button
               onClick={() => setIsAboutOpen(true)}
               className="flex items-center gap-2 p-2.5 rounded-full md:rounded-xl bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-800/50 transition shadow-sm border border-purple-100 dark:border-purple-800"
@@ -161,20 +194,15 @@ export default function Home() {
               <span className="hidden md:block text-sm font-bold pr-1">Hakkımızda</span>
             </button>
 
-            {/* TELEGRAM BOTU BUTONU */}
             <button
-              onClick={() => {
-                const userId = getUserId();
-                window.open(`https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME}?start=${userId}`, '_blank');
-              }}
+              onClick={() => setIsNotifModalOpen(true)}
               className="flex items-center gap-2 p-2.5 rounded-full md:rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/50 transition shadow-sm border border-blue-100 dark:border-blue-800"
-              title="Telegram Bildirimlerini Aç"
+              title="İletişim Tercihleri"
             >
-              <Send size={20} />
-              <span className="hidden md:block text-sm font-bold pr-1">Telegram</span>
+              <Bell size={20} />
+              <span className="hidden md:block text-sm font-bold pr-1">Bildirimler</span>
             </button>
 
-            {/* GECE/GÜNDÜZ BUTONU */}
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
               className="p-3 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-yellow-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition shadow-sm"
@@ -183,7 +211,6 @@ export default function Home() {
               {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
             </button>
 
-            {/* PANEL GİZLE/GÖSTER BUTONU */}
             <button
               onClick={() => setPanelOpen((prev) => !prev)}
               className="bg-gray-900 dark:bg-gray-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-black dark:hover:bg-gray-600 transition"
@@ -201,19 +228,103 @@ export default function Home() {
 
             {selectedRegion ? (
               <>
-                <div className="bg-gray-50 rounded-2xl p-6">
-                  <h3 className="text-xl font-semibold mb-4">Seçilen Alan / Koordinatlar</h3>
-                  <pre className="text-sm text-gray-600 dark:text-gray-300">{JSON.stringify(resolveCoordinates(selectedRegion), null, 2)}</pre>
+                <div className="bg-gray-50 dark:bg-gray-900 rounded-2xl p-6">
+                  <h3 className="text-xl font-semibold mb-4 dark:text-white">Seçilen Alan / Koordinatlar</h3>
+                  <pre className="text-sm text-gray-600 dark:text-gray-400">{JSON.stringify(resolveCoordinates(selectedRegion), null, 2)}</pre>
                 </div>
 
                 <div className="flex gap-3">
-                  <button onClick={handleAnalyze} disabled={loading} className="flex-1 bg-blue-600 text-white rounded-xl py-3 font-semibold">Analiz Başlat</button>
-                  <button onClick={handleDetail} className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-xl py-3 font-semibold">Detay</button>
+                  <button onClick={handleAnalyze} disabled={loading} className="flex-1 bg-blue-600 text-white rounded-xl py-3 font-semibold hover:bg-blue-700 transition">Analiz Başlat</button>
+                  <button onClick={handleDetail} className="flex-1 bg-gray-200 dark:bg-gray-700 dark:text-white rounded-xl py-3 font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition">Detay</button>
                 </div>
               </>
             ) : (
-              <p>Harita üzerinde bir bölge seçin veya çizin.</p>
+              <p className="text-gray-500 dark:text-gray-400">Harita üzerinde bir bölge seçin veya çizin.</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {isNotifModalOpen && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col border border-gray-100 dark:border-gray-700">
+            
+            <div className="flex items-center justify-between p-6 border-b border-gray-100 dark:border-gray-700">
+              <h3 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                <Bell className="text-blue-600 dark:text-blue-400" size={24} />
+                İletişim Tercihlerinizi Belirleyin
+              </h3>
+              <button onClick={() => setIsNotifModalOpen(false)} className="text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 p-2 rounded-full transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <p className="text-sm text-gray-500 dark:text-gray-400 -mt-2 mb-4">
+                Bölgenizdeki çevresel analizlerden ve erken uyarılardan anında haberdar olmak için bildirim kanallarınızı seçin.
+              </p>
+
+              {/* 1. E-Posta Formu (API'ye bağlandı) */}
+              <div>
+                <label className="flex items-center gap-2 text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">
+                  <Mail size={16} /> E-Posta Bildirimleri
+                </label>
+                <div className="flex gap-2">
+                  <input 
+                    type="email" 
+                    value={notifEmail} 
+                    onChange={e => setNotifEmail(e.target.value)} 
+                    placeholder="ornek@email.com" 
+                    className="flex-1 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 text-sm outline-none focus:border-blue-500 dark:text-white transition" 
+                  />
+                  <button 
+                    onClick={handleEmailSave} 
+                    className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-700 transition"
+                  >
+                    Kaydet
+                  </button>
+                </div>
+              </div>
+
+              {/* 2. Telegram Formu */}
+              <div className="border-t border-gray-100 dark:border-gray-700 pt-6">
+                 <label className="flex items-center gap-2 text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">
+                   <Send size={16} /> Telegram Entegrasyonu
+                 </label>
+                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                   Bölgenizdeki risk durumlarını anlık Telegram mesajı olarak almak için botu başlatın.
+                 </p>
+                 <button 
+                   onClick={() => {
+                     const userId = getUserId();
+                     window.open(`https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME}?start=${userId}`, '_blank');
+                   }} 
+                   className="w-full bg-[#0088cc] text-white py-3 rounded-xl text-sm font-bold hover:bg-[#0077b3] transition flex items-center justify-center gap-2 shadow-md"
+                 >
+                   <Send size={18} /> Telegram Botuna Bağlan
+                 </button>
+              </div>
+
+              {/* 3. WebPush Formu */}
+              <div className="border-t border-gray-100 dark:border-gray-700 pt-6 flex items-center justify-between">
+                 <div>
+                   <label className="flex items-center gap-2 text-sm font-bold text-gray-700 dark:text-gray-200">
+                     <Monitor size={16} /> Tarayıcı (WebPush)
+                   </label>
+                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Platform açıkken ekranda anlık uyarı alın.</p>
+                 </div>
+                 <button 
+                   onClick={() => {
+                     setWebPushStatus(!webPushStatus);
+                     setToast({type:'info', title:'WebPush', message: !webPushStatus ? 'Tarayıcı bildirimleri açıldı.' : 'Tarayıcı bildirimleri kapatıldı.'});
+                   }} 
+                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${webPushStatus ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                 >
+                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${webPushStatus ? 'translate-x-6' : 'translate-x-1'}`} />
+                 </button>
+              </div>
+            </div>
+
           </div>
         </div>
       )}
