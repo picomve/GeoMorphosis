@@ -9,12 +9,12 @@ export async function POST(request) {
     const { start_points, end_points, buffer_meters, region_name } = body;
 
     if (!start_points || start_points.length === 0) {
-      return NextResponse.json({ error: 'Başlangıç noktaları (start_points) gerekli' }, { status: 400 });
+      return NextResponse.json({ error: 'Başlangıç noktaları (start_points) veya geçerli alan koordinatları gerekli' }, { status: 400 });
     }
 
     const aiEngineUrl = process.env.NEXT_PUBLIC_AI_ENGINE_URL || 'http://localhost:8000';
 
-    // Vezne (FastAPI) için yeni payload yapımız
+    // Vezne (FastAPI) için güncellenmiş payload yapımız (bbox ve geoJson eklendi)
     const payload = {
       start_points,
       end_points: end_points || [],
