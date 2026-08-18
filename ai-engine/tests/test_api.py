@@ -150,3 +150,46 @@ def test_status_endpoint_marks_unparsable_result_as_failed(client, monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["status"] == "failed"
+
+
+def test_queue_endpoint_rejects_an_invalid_bbox(client):
+    """bbox dogrulamasi AnalyzeRequest'te alan tanimli olmadigi icin hic
+    calismiyordu; getattr her zaman None donuyordu."""
+    response = client.post(
+        "/api/analyze",
+        json={
+            "start_points": [{"lat": 36.853, "lng": 28.2715}],
+            "end_points": [],
+            "bbox": {"minLat": 40.0, "maxLat": 36.0, "minLng": 28.0, "maxLng": 29.0},
+        },
+    )
+
+    assert response.status_code == 400
+    assert "bbox" in response.json()["detail"].lower()
+
+
+def test_queue_endpoint_accepts_a_valid_bbox(client, monkeypatch):
+    """Gecerli bbox dogrulamayi gecip kuyruga ulasmali."""
+    import main
+
+    seen = {}
+
+    def fake_hset(key, mapping):
+        seen["key"] = key
+        return 1
+
+    monkeypatch.setattr(main.r, "hset", fake_hset)
+    monkeypatch.setattr(main.r, "rpush", lambda *a, **k: 1)
+
+    response = client.post(
+        "/api/analyze",
+        json={
+            "start_points": [{"lat": 36.853, "lng": 28.2715}],
+            "end_points": [],
+            "bbox": {"minLat": 36.0, "maxLat": 40.0, "minLng": 28.0, "maxLng": 29.0},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["task_id"]
+    assert seen["key"].startswith("task:")

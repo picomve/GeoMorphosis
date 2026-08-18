@@ -56,6 +56,10 @@ class AnalyzeRequest(BaseModel):
     buffer_meters: int = 1000
     years: Optional[list[int]] = None
     region_name: Optional[str] = None
+    # Haritada kisitlanan alan. Asagidaki dogrulama bu alani okuyordu ama
+    # model'de tanimli olmadigi icin Pydantic gonderilen bbox'i dusuruyordu
+    # ve kontrol hicbir zaman calismiyordu.
+    bbox: Optional[dict] = None
 
 
 # Worker'ın (mutfak) çağırdığı iç analiz isteği
@@ -130,7 +134,7 @@ def queue_analysis(request: AnalyzeRequest):
     """Vezne: analizi kuyruğa alır ve fiş numarasını (task_id) döner."""
     try:
         # 1. Kısıtlanan alan (bbox) kontrolü ve doğrulaması
-        if getattr(request, "bbox", None):
+        if request.bbox:
             min_lat = request.bbox.get("minLat")
             max_lat = request.bbox.get("maxLat")
             min_lng = request.bbox.get("minLng")
@@ -141,7 +145,7 @@ def queue_analysis(request: AnalyzeRequest):
                     raise HTTPException(status_code=400, detail="Geçersiz kısıtlanmış alan koordinatları (bbox).")
 
         # Boş bir start_points listesi kabul edilmez
-        if not getattr(request, "start_points", None):
+        if not request.start_points:
             raise HTTPException(status_code=400, detail="Başlangıç noktaları gerekli ve boş olmamalı")
 
         lat, lon = _extract_lat_lon(request.start_points[0])
