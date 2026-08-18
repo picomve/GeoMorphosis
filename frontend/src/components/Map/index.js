@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
 import { useEffect, useRef, useState } from 'react';
 import mockHeatmapData from './mockHeatmapData';
 
-export default function Map({ onRegionSelect }) {
+export default function Map({ onRegionSelect, isDarkMode }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const layersRef = useRef({});
@@ -15,10 +15,6 @@ export default function Map({ onRegionSelect }) {
     vegetation: false,
   });
 
- // src/components/Map/index.js (Sadece değişen/eklenen kısımlar)
-
-// src/components/Map/index.js (Sadece değişen/eklenen kısımlar)
-
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -26,25 +22,24 @@ export default function Map({ onRegionSelect }) {
       const L = (await import('leaflet')).default;
       await import('leaflet/dist/leaflet.css');
       await import('leaflet.heat');
-      
-      // Çizim eklentisi ve CSS'ini dinamik olarak yüklüyoruz
       await import('leaflet-draw/dist/leaflet.draw.css');
       await import('leaflet-draw');
 
       if (mapInstanceRef.current) return;
 
-      const map = L.map(mapRef.current, {
-        zoomControl: false,
-      }).setView([39.0, 35.0], 6);
+      const map = L.map(mapRef.current, { zoomControl: false }).setView([39.0, 35.0], 6);
 
-      L.control.zoom({
-        position: 'bottomleft',
-      }).addTo(map);
+      L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
-      // --- Katman tanımlamaları aynı kalacak (normalMap, satelliteMap, heatmap'ler) ---
       const normalMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap',
         maxZoom: 19,
+      });
+
+      const darkMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://carto.com/attributions">CARTO</a>',
+        maxZoom: 19,
+        className: 'custom-dark-tiles',
       });
 
       const satelliteMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
@@ -52,93 +47,79 @@ export default function Map({ onRegionSelect }) {
         maxZoom: 19,
       });
 
-      normalMap.addTo(map);
+      if (isDarkMode) darkMap.addTo(map);
+      else normalMap.addTo(map);
 
-      // Heatmap kodları burada aynen kalsın...
-      // ...
-
-      // --- YENİ EKLENEN ÇİZİM MANTIĞI ---
-      
-      // Çizilen şekilleri tutacağımız bir katman grubu oluşturuyoruz
       const drawnItems = new L.FeatureGroup();
       map.addLayer(drawnItems);
 
-      // Çizim aracının (toolbar) ayarları
       const drawControl = new L.Control.Draw({
-        position: 'bottomright', // YENİ EKLENDİ: Araç çubuğunu sağ alta taşıyoruz
-        edit: {
-          featureGroup: drawnItems, 
-        },
-        draw: {
-          polygon: true,
-          rectangle: true,
-          circle: false, 
-          circlemarker: false,
-          marker: false,
-          polyline: false,
-        }
+        position: 'bottomright',
+        edit: { featureGroup: drawnItems },
+        draw: { polygon: true, rectangle: true, circle: false, circlemarker: false, marker: false, polyline: false },
       });
+
       map.addControl(drawControl);
 
-      // Çizim tamamlandığında tetiklenecek olay
       map.on(L.Draw.Event.CREATED, (e) => {
-        // Eğer her seferinde sadece tek bir alan seçilmesini istiyorsak, 
-        // yeni çizim yapıldığında öncekileri temizleyebiliriz:
-        drawnItems.clearLayers(); 
-
+        drawnItems.clearLayers();
         const layer = e.layer;
         drawnItems.addLayer(layer);
 
-        // Şekli GeoJSON formatına dönüştürüyoruz (FR-1 görevinin kalbi)
         const geoJsonData = layer.toGeoJSON();
-        console.log("Üretilen GeoJSON Verisi:", geoJsonData);
-
-        // Üst bileşene (page.js) bu veriyi gönderiyoruz
-        // Analiz API'miz şimdilik merkez noktası (lat, lng) bekliyor olabilir, 
-        // uyumluluğu bozmamak için merkezi de hesaplayıp gönderiyoruz.
         const center = layer.getBounds().getCenter();
+
         onRegionSelect?.({
           geoJson: geoJsonData,
           lat: center.lat,
           lng: center.lng,
-          radius: 1000 // İleride poligonun alanına göre dinamikleştirilebilir
+          radius: 1000,
         });
       });
 
-      // Eski `map.on('click')` ile çember çizen kodu silebilirsin.
-
-      // ----------------------------------
-
       mapInstanceRef.current = map;
-      layersRef.current = {
-        normalMap,
-        satelliteMap,
-        // heatmap katmanları...
-      };
+      layersRef.current = { normalMap, darkMap, satelliteMap };
     };
 
     initMap();
-    // ...
+
     return () => {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
       }
     };
-  }, [onRegionSelect]);
+  }, [onRegionSelect, isDarkMode]);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !layersRef.current.normalMap || !layersRef.current.darkMap) return;
+
+    if (baseMap === 'normal') {
+      if (isDarkMode) {
+        map.removeLayer(layersRef.current.normalMap);
+        layersRef.current.darkMap.addTo(map);
+      } else {
+        map.removeLayer(layersRef.current.darkMap);
+        layersRef.current.normalMap.addTo(map);
+      }
+    }
+  }, [isDarkMode, baseMap]);
 
   const handleBaseMapChange = (type) => {
     const map = mapInstanceRef.current;
-    const { normalMap, satelliteMap } = layersRef.current;
+    const { normalMap, darkMap, satelliteMap } = layersRef.current;
 
     if (!map || type === baseMap) return;
 
     if (type === 'satellite') {
       map.removeLayer(normalMap);
+      if (darkMap) map.removeLayer(darkMap);
       satelliteMap.addTo(map);
     } else {
       map.removeLayer(satelliteMap);
-      normalMap.addTo(map);
+      if (isDarkMode) darkMap.addTo(map);
+      else normalMap.addTo(map);
     }
 
     setBaseMap(type);
@@ -157,13 +138,8 @@ export default function Map({ onRegionSelect }) {
 
     setActiveOverlays((prev) => {
       const next = { ...prev, [key]: !prev[key] };
-
-      if (next[key]) {
-        layer.addTo(map);
-      } else {
-        map.removeLayer(layer);
-      }
-
+      if (next[key]) layer.addTo(map);
+      else map.removeLayer(layer);
       return next;
     });
   };
@@ -176,68 +152,33 @@ export default function Map({ onRegionSelect }) {
 
   return (
     <div className="relative w-full h-full">
-
       <div ref={mapRef} id="map" className="w-full h-full" />
 
-      {/* Katman kontrol paneli */}
+      {/* Sol Harita Görünümü Paneli */}
+      <div className="absolute top-24 left-4 z-[1000] bg-white/95 dark:bg-gray-800/95 backdrop-blur-md rounded-2xl shadow-xl p-4 w-64 border border-transparent dark:border-gray-700 transition-colors duration-300">
+        <h3 className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3 transition-colors duration-300">Harita Görünümü</h3>
 
-      <div className="absolute top-24 left-4 z-[1000] bg-white/95 backdrop-blur-md rounded-2xl shadow-xl p-4 w-64">
-
-        <h3 className="text-sm font-bold text-gray-700 mb-3">
-          Harita Görünümü
-        </h3>
-
-        <div className="flex bg-gray-100 rounded-xl p-1 mb-4">
-
-          <button
-            onClick={() => handleBaseMapChange('normal')}
-            className={`flex-1 text-sm font-medium py-2 rounded-lg transition ${
-              baseMap === 'normal'
-                ? 'bg-white shadow text-gray-900'
-                : 'text-gray-500'
-            }`}
-          >
+        <div className="flex bg-gray-100 dark:bg-gray-900 rounded-xl p-1 mb-4 transition-colors duration-300">
+          <button onClick={() => handleBaseMapChange('normal')} className={`flex-1 text-sm font-medium py-2 rounded-lg transition-colors duration-300 ${baseMap === 'normal' ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>
             Normal
           </button>
 
-          <button
-            onClick={() => handleBaseMapChange('satellite')}
-            className={`flex-1 text-sm font-medium py-2 rounded-lg transition ${
-              baseMap === 'satellite'
-                ? 'bg-white shadow text-gray-900'
-                : 'text-gray-500'
-            }`}
-          >
+          <button onClick={() => handleBaseMapChange('satellite')} className={`flex-1 text-sm font-medium py-2 rounded-lg transition-colors duration-300 ${baseMap === 'satellite' ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>
             Uydu
           </button>
-
         </div>
 
-        <h3 className="text-sm font-bold text-gray-700 mb-3">
-          Katmanlar
-        </h3>
+        <h3 className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3 transition-colors duration-300">Katmanlar</h3>
 
         <div className="space-y-2">
-
           {overlayOptions.map((option) => (
-            <button
-              key={option.key}
-              onClick={() => handleOverlayToggle(option.key)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition ${
-                activeOverlays[option.key]
-                  ? 'bg-gray-900 text-white'
-                  : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-              }`}
-            >
+            <button key={option.key} onClick={() => handleOverlayToggle(option.key)} className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-colors duration-300 ${activeOverlays[option.key] ? 'bg-gray-900 dark:bg-gray-600 text-white' : 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
               <span className={`w-3 h-3 rounded-full ${option.color}`} />
               {option.label}
             </button>
           ))}
-
         </div>
-
       </div>
-
     </div>
   );
 }

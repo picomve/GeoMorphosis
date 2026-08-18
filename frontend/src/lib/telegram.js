@@ -55,14 +55,42 @@ export async function sendSystemTelegramNotification(message, title = 'Sistem Bi
   return postMessage(token, chatId, message, title);
 }
 
+/**
+ * Kullanici kimliginden (regions_analysis.user_id) chat id'yi cozup bildirim gonderir.
+ * Telegram webhook'u /start ile eslestirdigi chat id'yi bu tabloya yaziyor.
+ */
+export async function sendTelegramNotificationToUser(userId, message, title = 'Sistem Bildirimi') {
+  try {
+    const prisma = await getPrisma();
+    const user = await prisma.regions_analysis.findUnique({
+      where: { user_id: userId },
+      select: { telegram_chat_id: true },
+    });
+
+    if (user?.telegram_chat_id) {
+      return sendTelegramNotification(user.telegram_chat_id, message, title);
+    }
+
+    console.warn('Kullanicinin Telegram hesabi eslestirilmemis, bildirim atlanıyor.');
+    return false;
+  } catch (error) {
+    console.error('Telegram bildirim gönderme hatası:', error);
+    return false;
+  }
+}
+
 export async function linkTelegramAccount(userId, chatId) {
   try {
     const prisma = await getPrisma();
-    const updatedUser = await prisma.regions_analysis.update({
+    const updatedUser = await prisma.regions_analysis.upsert({
       where: {
         user_id: userId,
       },
-      data: {
+      update: {
+        telegram_chat_id: String(chatId),
+      },
+      create: {
+        user_id: userId,
         telegram_chat_id: String(chatId),
       },
     });
