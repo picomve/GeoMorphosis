@@ -46,7 +46,7 @@ export default function Home() {
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // --- YENİ EKLENEN BİLDİRİM FORMU STATELERİ ---
+  // --- BİLDİRİM FORMU STATELERİ ---
   const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
   const [notifEmail, setNotifEmail] = useState('');
   const [webPushStatus, setWebPushStatus] = useState(false);
@@ -137,6 +137,35 @@ export default function Home() {
     router.push(`/region?${params.toString()}`);
   };
 
+  // --- YENİ EKLENEN: E-POSTAYI ARKA PLANA (API'YE) GÖNDERME FONKSİYONU ---
+  const handleEmailSave = async () => {
+    if (!notifEmail || !notifEmail.includes('@')) {
+      setToast({ type: 'warning', title: 'Eksik Bilgi', message: 'Lütfen geçerli bir e-posta adresi girin.' });
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: notifEmail, 
+          region_id: analysisResult?.region_id || 1, // Ekibin API'si bölge ID istiyor
+          notification_type: 'email' 
+        }),
+      });
+
+      if (res.ok) {
+        setToast({ type: 'success', title: 'Bağlantı Başarılı', message: 'E-posta adresiniz sisteme başarıyla kaydedildi.' });
+      } else {
+        setToast({ type: 'danger', title: 'Hata', message: 'Sisteme kaydedilirken bir sorun oluştu.' });
+      }
+    } catch (err) {
+      console.error('E-posta kayıt hatası:', err);
+      setToast({ type: 'danger', title: 'Bağlantı Hatası', message: 'Sunucuya ulaşılamadı.' });
+    }
+  };
+
   return (
     <main className="fixed inset-0 overflow-hidden bg-gray-100 dark:bg-gray-900 transition-colors duration-300">
       <div className="absolute inset-0 z-0">
@@ -156,7 +185,6 @@ export default function Home() {
           <div className="flex items-center gap-3 md:gap-4">
             <p className="text-xl text-gray-500 dark:text-gray-400 hidden lg:block pr-4">Uydu Analiz Sistemi</p>
 
-            {/* HAKKIMIZDA BUTONU */}
             <button
               onClick={() => setIsAboutOpen(true)}
               className="flex items-center gap-2 p-2.5 rounded-full md:rounded-xl bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-800/50 transition shadow-sm border border-purple-100 dark:border-purple-800"
@@ -166,7 +194,6 @@ export default function Home() {
               <span className="hidden md:block text-sm font-bold pr-1">Hakkımızda</span>
             </button>
 
-            {/* YENİ BİLDİRİM TERCİHLERİ BUTONU (Eski Telegram butonunun yerini aldı) */}
             <button
               onClick={() => setIsNotifModalOpen(true)}
               className="flex items-center gap-2 p-2.5 rounded-full md:rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/50 transition shadow-sm border border-blue-100 dark:border-blue-800"
@@ -176,7 +203,6 @@ export default function Home() {
               <span className="hidden md:block text-sm font-bold pr-1">Bildirimler</span>
             </button>
 
-            {/* GECE/GÜNDÜZ BUTONU */}
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
               className="p-3 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-yellow-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition shadow-sm"
@@ -185,7 +211,6 @@ export default function Home() {
               {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
             </button>
 
-            {/* PANEL GİZLE/GÖSTER BUTONU */}
             <button
               onClick={() => setPanelOpen((prev) => !prev)}
               className="bg-gray-900 dark:bg-gray-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-black dark:hover:bg-gray-600 transition"
@@ -220,7 +245,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* YENİ EKLENEN: BİLDİRİM TERCİHLERİ FORMU (MODAL) */}
       {isNotifModalOpen && (
         <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col border border-gray-100 dark:border-gray-700">
@@ -240,7 +264,7 @@ export default function Home() {
                 Bölgenizdeki çevresel analizlerden ve erken uyarılardan anında haberdar olmak için bildirim kanallarınızı seçin.
               </p>
 
-              {/* 1. E-Posta Formu */}
+              {/* 1. E-Posta Formu (API'ye bağlandı) */}
               <div>
                 <label className="flex items-center gap-2 text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">
                   <Mail size={16} /> E-Posta Bildirimleri
@@ -254,7 +278,7 @@ export default function Home() {
                     className="flex-1 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 text-sm outline-none focus:border-blue-500 dark:text-white transition" 
                   />
                   <button 
-                    onClick={() => setToast({type:'success', title:'Kaydedildi', message:'E-posta tercihiniz güncellendi.'})} 
+                    onClick={handleEmailSave} 
                     className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-700 transition"
                   >
                     Kaydet
@@ -262,7 +286,7 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* 2. Telegram Formu (Ekibin mantığı korundu) */}
+              {/* 2. Telegram Formu */}
               <div className="border-t border-gray-100 dark:border-gray-700 pt-6">
                  <label className="flex items-center gap-2 text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">
                    <Send size={16} /> Telegram Entegrasyonu
