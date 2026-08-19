@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { sendSystemTelegramNotification } from '@/lib/telegram';
+import { sendSystemTelegramNotification, sendAnalysisReportToUser } from '@/lib/telegram';
 
 export async function POST(request) {
   try {
     const body = await request.json();
 
     // Artık 'coordinates' yerine 'start_points' ve 'end_points' bekliyoruz
-    const { start_points, end_points, buffer_meters, region_name } = body;
+    const { start_points, end_points, buffer_meters, region_name, user_id: userId } = body;
 
     if (!start_points || start_points.length === 0) {
       return NextResponse.json({ error: 'Başlangıç noktaları (start_points) veya geçerli alan koordinatları gerekli' }, { status: 400 });
@@ -20,6 +20,7 @@ export async function POST(request) {
       end_points: end_points || [],
       buffer_meters: buffer_meters || 1000,
       region_name: region_name || null,
+      user_id: userId || null,
     };
 
     const controller = new AbortController();
@@ -76,30 +77,39 @@ export async function GET(request) {
 
   // task_id varsa Polling (Durum Sorgulama) işlemi yap
   const taskId = searchParams.get('task_id');
+  const userId = searchParams.get('user_id');
+  const reportLat = searchParams.get('lat');
+  const reportLng = searchParams.get('lng');
 
   if (taskId) {
-    try {
-      const response = await fetch(`${aiEngineUrl}/api/status/${taskId}`);
+  try {
+    const response = await fetch(`${aiEngineUrl}/api/status/${taskId}`);
 
-      if (!response.ok) {
-        throw new Error(`AI Engine hata döndü: ${response.status}`);
-      }
-
-      const statusData = await response.json();
-
-      // Eğer mutfak analizi bitirdiyse Telegram'a müjdeyi ver
-      if (statusData.status === 'completed') {
-         await sendSystemTelegramNotification(
-           `✅ Fiş No: ${taskId}\nHarita üzerinde bölge yapay zeka analizi başarıyla tamamlandı ve sonuçlar arayüze iletildi.`,
-           'GEO-PULSE Analiz Raporu'
-         );
-      }
-
-      return NextResponse.json(statusData);
-    } catch (error) {
-       return NextResponse.json({ error: 'Durum sorgulanamadı' }, { status: 500 });
+    if (!response.ok) {
+      throw new Error(`AI Engine hata döndü: ${response.status}`);
     }
+
+    const statusData = await response.json();
+
+    if (statusData.status === 'completed') {
+       const report = {
+         lat: reportLat,
+         lng: reportLng,
+         riskLevel: statusData.result?.fire_risk || 'normal',
+         summary: statusData.result?.demo_mode
+           ? 'Uydu verisi alınamadığı için demo değerleri gösterildi.'
+           : 'Bölge analizi tamamlandı, detaylar panelde görüntülenebilir.',
+         timestamp: new Date().toISOString(),
+       };
+
+       await sendAnalysisReportToUser(userId, report);
+    }
+
+    return NextResponse.json(statusData);
+  } catch (error) {
+     return NextResponse.json({ error: 'Durum sorgulanamadı' }, { status: 500 });
   }
+}
 
   // --- ESKİ SİSTEM GİBİ SADECE LAT/LON GELDİYSE (Geriye Dönük Uyumluluk İçin Korundu) ---
   const lat = searchParams.get('lat');
