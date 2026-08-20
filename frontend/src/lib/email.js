@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { getActiveEmailSubscription } from '@/lib/email-subscriptions';
 //dotenv'e ihtiyaç duyulmuyor çünkü Next.js otomatik olarak .env dosyasını yükler ve process.env üzerinden erişim sağlar.
 
 let transporter = null;
@@ -45,6 +46,36 @@ export async function sendEmailNotification(to, message, title = 'Sistem Bildiri
     return true;
   } catch (error) {
     console.error('Email bildirim hatası:', error);
+    return false;
+  }
+}
+
+export async function sendAnalysisEmailToUser(userId, report) {
+  try {
+    const subscription = getActiveEmailSubscription(userId);
+
+    if (!subscription) {
+      console.warn('Kullanıcının aktif e-posta aboneliği bulunamadı, rapor atlanıyor.');
+      return false;
+    }
+
+    const riskLabels = {
+      yok: 'Yok',
+      dusuk: 'Düşük',
+      orta: 'Orta',
+      yuksek: 'Yüksek',
+    };
+    const risk = riskLabels[report.riskLevel] || 'Normal';
+    const message = [
+      `Konum: ${report.lat}, ${report.lng}`,
+      `Risk seviyesi: ${risk}`,
+      '',
+      report.summary,
+    ].join('\n');
+
+    return sendEmailNotification(subscription.email, message, 'GeoMorphosis Analiz Raporu');
+  } catch (error) {
+    console.error('Analiz e-postası gönderme hatası:', error);
     return false;
   }
 }

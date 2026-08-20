@@ -3,6 +3,15 @@ import { linkTelegramAccount } from "@/lib/telegram";
 
 export async function POST(req) {
   try {
+    const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    if (
+      webhookSecret &&
+      req.headers.get('x-telegram-bot-api-secret-token') !== webhookSecret
+    ) {
+      console.warn('Geçersiz Telegram webhook isteği reddedildi.');
+      return NextResponse.json({ ok: false }, { status: 401 });
+    }
+
     const body = await req.json();
 
     console.log("Telegram'dan Gelen İstek:", JSON.stringify(body, null, 2))

@@ -2,6 +2,14 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# CPU-only PyTorch, ultralytics'ten ONCE kuruluyor.
+# Aksi halde ultralytics torch'u PyPI'dan CUDA'li olarak cekiyor ve konteynerde
+# GPU olmamasina ragmen ~3.4 GB olu agirlik geliyor (nvidia/* 2.7 GB + triton 691 MB).
+# Torch burada zaten karsilandigi icin sonraki adim CUDA surumunu indirmiyor.
+RUN pip install --no-cache-dir --default-timeout=1000 \
+        --index-url https://download.pytorch.org/whl/cpu \
+        torch torchvision
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir --default-timeout=1000 -r requirements.txt
 

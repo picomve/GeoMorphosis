@@ -174,6 +174,12 @@ def analyze_region(
             "deforestation": deforestation,
             "lake_shrinkage": lake_shrinkage,
         },
+        "restricted_area": {
+            "bbox": None,
+            "center": {"lat": lat, "lon": lon},
+            "buffer_meters": buffer_meters,
+            "has_geojson": False,
+        },
     }
 
     fire_risk = _max_risk(

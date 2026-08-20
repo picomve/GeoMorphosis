@@ -50,6 +50,18 @@ def init_db():
         );
         """)
 
+        # Arayüzde e-posta bildirimlerini etkinleştiren kullanıcıların kalıcı kaydı.
+        # user_id, tarayıcıdaki GeoMorphosis kullanıcı kimliğidir.
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS email_subscriptions (
+            user_id TEXT PRIMARY KEY,
+            email VARCHAR(255) NOT NULL,
+            is_active BOOLEAN NOT NULL DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
         conn.commit()
         conn.close()
         print("Veritabani tablolari basariyla olusturuldu.")
