@@ -6,7 +6,7 @@ const redisHost = process.env.REDIS_HOST || 'localhost';
 const redisPort = process.env.REDIS_PORT || 6379;
 
 // Yapay zeka motorunun (Vezne/FastAPI) adresi
-const aiEngineUrl = process.env.AI_ENGINE_URL || 'http://ai-engine:8000';
+const aiEngineUrl = process.env.AI_ENGINE_URL || 'http://localhost:8000';
 
 // Uydu görüntüsü indirme + YOLO tahmini uzun sürebiliyor
 const ANALYSIS_TIMEOUT_MS = Number(process.env.ANALYSIS_TIMEOUT_MS) || 180000;

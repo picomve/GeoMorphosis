@@ -3,13 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import mockHeatmapData from './mockHeatmapData';
 
-function getFireColor(intensity) {
-  if (intensity >= 0.75) return '#b91c1c';
-  if (intensity >= 0.5) return '#ef4444';
-  if (intensity >= 0.25) return '#f97316';
-  return '#fbbf24';
-}
-
 function getPollutionColor(intensity) {
   if (intensity >= 0.75) return '#1e3a8a';
   if (intensity >= 0.5) return '#2563eb';
@@ -78,9 +71,8 @@ export default function Map({ onRegionSelect, isDarkMode }) {
 
   const [baseMap, setBaseMap] = useState('normal');
   const [activeOverlays, setActiveOverlays] = useState({
-    fire: true,
     pollution: false,
-    vegetation: false,
+    vegetation: true,
   });
 
   useEffect(() => {
@@ -128,12 +120,10 @@ export default function Map({ onRegionSelect, isDarkMode }) {
         normalMap.addTo(map);
       }
 
-      // Nokta tabanlı katmanlar (yangın / kirlilik / NDVI)
-      const fireLayer = buildPointLayer(L, mockHeatmapData, getFireColor, 'Yangın Riski');
+      // Nokta tabanlı katmanlar (kirlilik / NDVI)
       const pollutionLayer = buildPointLayer(L, mockHeatmapData, getPollutionColor, 'Kirlilik');
       const vegetationLayer = buildPointLayer(L, mockHeatmapData, getVegetationColor, 'NDVI');
 
-      if (activeOverlays.fire) fireLayer.addTo(map);
       if (activeOverlays.pollution) pollutionLayer.addTo(map);
       if (activeOverlays.vegetation) vegetationLayer.addTo(map);
 
@@ -179,7 +169,6 @@ export default function Map({ onRegionSelect, isDarkMode }) {
         normalMap,
         darkMap,
         satelliteMap,
-        fireLayer,
         pollutionLayer,
         vegetationLayer,
       };
@@ -236,7 +225,6 @@ export default function Map({ onRegionSelect, isDarkMode }) {
   const handleOverlayToggle = (key) => {
     const map = mapInstanceRef.current;
     const layerMap = {
-      fire: layersRef.current.fireLayer,
       pollution: layersRef.current.pollutionLayer,
       vegetation: layersRef.current.vegetationLayer,
     };
@@ -256,7 +244,6 @@ export default function Map({ onRegionSelect, isDarkMode }) {
   };
 
   const overlayOptions = [
-    { key: 'fire', label: 'Yangın Katmanı', color: 'bg-red-500' },
     { key: 'pollution', label: 'Kirlilik Katmanı', color: 'bg-blue-500' },
     { key: 'vegetation', label: 'NDVI (Bitki Örtüsü)', color: 'bg-green-500' },
   ];
@@ -343,9 +330,9 @@ export default function Map({ onRegionSelect, isDarkMode }) {
             Yoğunluk
           </p>
           <div className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded-full" style={{ background: '#fbbf24' }} />
+            <span className="w-3 h-3 rounded-full" style={{ background: '#bfdbfe' }} />
             <span className="text-[11px] text-gray-500 mr-2">Düşük</span>
-            <span className="w-4 h-4 rounded-full" style={{ background: '#ef4444' }} />
+            <span className="w-4 h-4 rounded-full" style={{ background: '#1e3a8a' }} />
             <span className="text-[11px] text-gray-500">Yüksek</span>
           </div>
         </div>

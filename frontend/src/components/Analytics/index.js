@@ -15,12 +15,16 @@ import {
 
 const ACCENT = {
   ndvi: '#2F6F52',
-  fire: '#EF4444',
   pollution: '#3B82F6',
 };
 
 const RISK_LABELS = { yok: 'Yok', dusuk: 'Düşük', orta: 'Orta', yuksek: 'Yüksek' };
 const RISK_PERCENT = { yok: 4, dusuk: 28, orta: 58, yuksek: 90 };
+
+// NDVI'da bir noktanın diğer tüm noktaların ortalamasından bu kadar (mutlak)
+// sapması durumunda "anormal dalgalanma" olarak işaretliyoruz. 0-1 aralığında
+// 0.15, gözle görülür bir bitki örtüsü kaybı/artışına denk gelir.
+const ANOMALY_THRESHOLD = 0.15;
 
 function normalizeRisk(value) {
   if (!value) return 'yok';
@@ -56,7 +60,7 @@ function RiskBar({ percent, accent }) {
   );
 }
 
-// --- Ortak tooltip kabuğu: her iki grafik için de aynı görünüm ---
+// --- Ortak tooltip kabuğu ---
 function TooltipShell({ children }) {
   return (
     <div className="bg-white border border-[#E2E4E8] rounded-md shadow-md px-3 py-2 text-xs">
@@ -107,21 +111,32 @@ export default function Analytics({ data }) {
     { ay: 'May', deger: data.ndvi_score ?? 0.75 },
   ];
 
-  const currentRisk = normalizeRisk(data.fire_risk);
   const currentPollution = normalizeRisk(data.pollution_level);
 
   const ndviPercent = Math.round((data.ndvi_score ?? 0) * 100);
-  const firePercent = RISK_PERCENT[currentRisk];
   const pollutionPercent = RISK_PERCENT[currentPollution];
-  const total = ndviPercent + firePercent + pollutionPercent || 1;
+  const total = ndviPercent + pollutionPercent || 1;
 
   const aiData = [
     { ad: 'Bitki Örtüsü', deger: Math.round((ndviPercent / total) * 100) },
-    { ad: 'Yangın Riski', deger: Math.round((firePercent / total) * 100) },
     { ad: 'Kirlilik', deger: Math.round((pollutionPercent / total) * 100) },
   ];
 
-  const PIE_COLORS = [ACCENT.ndvi, ACCENT.fire, ACCENT.pollution];
+  const PIE_COLORS = [ACCENT.ndvi, ACCENT.pollution];
+
+  // Anormal dalgalanma tespiti: HER noktayı, kendi dışındaki noktaların
+  // ortalamasıyla karşılaştırıyoruz. Sapma eşik değerini aşan her nokta
+  // "anomali" olarak işaretlenir (grafikte kırmızı nokta + uyarı listesinde).
+  const anomalies = ndviHistory
+    .map((point, index) => {
+      const others = ndviHistory.filter((_, i) => i !== index).map((h) => h.deger);
+      const othersAvg = others.reduce((sum, v) => sum + v, 0) / (others.length || 1);
+      const deviation = point.deger - othersAvg;
+      return { ...point, deviation, isAnomaly: Math.abs(deviation) > ANOMALY_THRESHOLD };
+    })
+    .filter((point) => point.isAnomaly);
+
+  const hasAnomaly = anomalies.length > 0;
 
   return (
     <div className="space-y-5">
@@ -148,18 +163,12 @@ export default function Analytics({ data }) {
       </div>
 
       {/* KPI Kartları */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <KpiCard
           label="NDVI Skoru"
           value={data.ndvi_score ?? '0.00'}
           sublabel="Bitki örtüsü yoğunluğu"
           accent={ACCENT.ndvi}
-        />
-        <KpiCard
-          label="Yangın Riski"
-          value={RISK_LABELS[currentRisk]}
-          sublabel="Risk seviyesi"
-          accent={ACCENT.fire}
         />
         <KpiCard
           label="Kirlilik"
@@ -177,23 +186,51 @@ export default function Analytics({ data }) {
 
       {/* NDVI Grafiği */}
       <div className="bg-white border border-[#E2E4E8] rounded-lg p-6">
-        <div className="flex items-center justify-between mb-6">
-          <p className="text-[11px] tracking-[0.12em] uppercase text-[#6B7280]">
-            NDVI Değişim Analizi
-          </p>
-          <span className="font-data text-sm text-[#2F6F52] font-medium tabular-nums">
-            {data.ndvi_score}
+        <div className="flex items-start justify-between mb-2">
+          <div>
+            <h3 className="text-base font-bold text-[#1C2128] mb-3">
+              NDVI Değişim Analizi
+            </h3>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: ACCENT.ndvi }} />
+                <span className="text-[11px] text-gray-500">Bu Ölçüm</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-gray-300" />
+                <span className="text-[11px] text-gray-500">Önceki Ölçüm</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-baseline gap-3 mb-6">
+          <span
+            className="font-data text-3xl font-bold tabular-nums"
+            style={{ color: ACCENT.ndvi }}
+          >
+            {(data.ndvi_score ?? 0).toFixed(2)}
+          </span>
+          <span className="font-data text-lg text-gray-400 tabular-nums">
+            {ndviHistory[ndviHistory.length - 2]?.deger.toFixed(2)}
           </span>
         </div>
 
         <div className="h-[320px]">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={ndviHistory} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+            <AreaChart data={ndviHistory} margin={{ top: 10, right: 8, left: -20, bottom: 0 }}>
               <defs>
-                <linearGradient id="ndviGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#2F6F52" stopOpacity={0.18} />
-                  <stop offset="95%" stopColor="#2F6F52" stopOpacity={0} />
+                <linearGradient id="ndviGlowFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={ACCENT.ndvi} stopOpacity={0.18} />
+                  <stop offset="95%" stopColor={ACCENT.ndvi} stopOpacity={0} />
                 </linearGradient>
+                <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
               </defs>
 
               <CartesianGrid strokeDasharray="3 3" stroke="#F0F1F3" vertical={false} />
@@ -214,72 +251,95 @@ export default function Analytics({ data }) {
                 tickLine={false}
               />
 
-              <Tooltip content={<NdviTooltip />} cursor={{ stroke: '#2F6F52', strokeDasharray: '3 3', strokeWidth: 1 }} />
+              <Tooltip
+                content={<NdviTooltip />}
+                cursor={{ stroke: ACCENT.ndvi, strokeDasharray: '4 4', strokeWidth: 1 }}
+              />
 
               <Area
                 type="monotone"
                 dataKey="deger"
-                stroke="#2F6F52"
-                strokeWidth={2}
-                fill="url(#ndviGradient)"
-                activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff', fill: '#2F6F52' }}
-                animationDuration={700}
+                stroke={ACCENT.ndvi}
+                strokeWidth={2.5}
+                fill="url(#ndviGlowFill)"
+                filter="url(#glow)"
+                dot={(props) => {
+                  const { cx, cy, payload } = props;
+                  const isAnomalyPoint = anomalies.some((a) => a.ay === payload.ay);
+                  if (!isAnomalyPoint) return null;
+                  return (
+                    <circle
+                      key={`anomaly-${payload.ay}`}
+                      cx={cx}
+                      cy={cy}
+                      r={6}
+                      fill="#EF4444"
+                      stroke="#fff"
+                      strokeWidth={2}
+                    />
+                  );
+                }}
+                activeDot={{
+                  r: 6,
+                  strokeWidth: 3,
+                  stroke: '#fff',
+                  fill: ACCENT.ndvi,
+                }}
+                animationDuration={800}
               />
             </AreaChart>
           </ResponsiveContainer>
         </div>
+
+        {hasAnomaly && (
+          <div className="mt-4 flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2.5">
+            <span className="text-amber-500 text-sm mt-0.5">⚠</span>
+            <div className="text-xs text-amber-800 leading-relaxed">
+              <p className="font-semibold mb-1">
+                {anomalies.length > 1
+                  ? `${anomalies.length} noktada anormal dalgalanma tespit edildi`
+                  : 'Anormal dalgalanma tespit edildi'}
+              </p>
+              <ul className="space-y-0.5">
+                {anomalies.map((a) => (
+                  <li key={a.ay}>
+                    <span className="font-medium">{a.ay}</span> ayı, ortalamaya göre{' '}
+                    {a.deviation > 0 ? 'beklenenden çok yüksek' : 'beklenenden çok düşük'} bir
+                    NDVI değeri ({a.deger.toFixed(2)}) gösteriyor.
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-amber-700">Sonuçları teyit etmeniz önerilir.</p>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Risk Göstergeleri */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white border border-[#E2E4E8] rounded-lg p-6">
-          <div className="flex items-center justify-between mb-5">
-            <p className="text-[11px] tracking-[0.12em] uppercase text-[#6B7280]">
-              Yangın Riski
-            </p>
-            <span className="text-sm font-medium" style={{ color: ACCENT.fire }}>
-              {RISK_LABELS[currentRisk]}
-            </span>
-          </div>
-          <RiskBar percent={RISK_PERCENT[currentRisk]} accent={ACCENT.fire} />
+      {/* Kirlilik Göstergesi */}
+      <div className="bg-white border border-[#E2E4E8] rounded-lg p-6">
+        <div className="flex items-center justify-between mb-5">
+          <p className="text-[11px] tracking-[0.12em] uppercase text-[#6B7280]">
+            Kirlilik Seviyesi
+          </p>
+          <span className="text-sm font-medium" style={{ color: ACCENT.pollution }}>
+            {RISK_LABELS[currentPollution]}
+          </span>
         </div>
-
-        <div className="bg-white border border-[#E2E4E8] rounded-lg p-6">
-          <div className="flex items-center justify-between mb-5">
-            <p className="text-[11px] tracking-[0.12em] uppercase text-[#6B7280]">
-              Kirlilik Seviyesi
-            </p>
-            <span className="text-sm font-medium" style={{ color: ACCENT.pollution }}>
-              {RISK_LABELS[currentPollution]}
-            </span>
-          </div>
-          <RiskBar percent={RISK_PERCENT[currentPollution]} accent={ACCENT.pollution} />
-        </div>
+        <RiskBar percent={RISK_PERCENT[currentPollution]} accent={ACCENT.pollution} />
       </div>
 
       {/* Yapay Zekâ Dağılımı */}
       <div className="bg-white border border-[#E2E4E8] rounded-lg p-6">
         <div className="flex items-center justify-between mb-4">
-          <p className="text-[11px] tracking-[0.12em] uppercase text-[#6B7280]">
+          <h3 className="text-base font-bold text-[#1C2128]">
             Yapay Zekâ Tespit Dağılımı
-          </p>
-          <div className="flex items-center gap-1.5">
-            {['↻', '⚙', '↓'].map((icon) => (
-              <span
-                key={icon}
-                className="w-6 h-6 rounded-full bg-[#2F6F52] text-white text-[11px] flex items-center justify-center"
-              >
-                {icon}
-              </span>
-            ))}
-          </div>
+          </h3>
         </div>
 
         <p className="text-[15px] text-[#374151] leading-relaxed mb-8 max-w-xl">
           Bu bölgede yapılan analizde, tespit edilen etkenlerin{' '}
-          <span className="font-semibold text-[#1C2128]">%{aiData[0].deger}'i bitki örtüsü</span>,{' '}
-          <span className="font-semibold text-[#1C2128]">%{aiData[1].deger}'i yangın riski</span>{' '}
-          ve <span className="font-semibold text-[#1C2128]">%{aiData[2].deger}'i kirlilik</span>{' '}
+          <span className="font-semibold text-[#1C2128]">%{aiData[0].deger}'i bitki örtüsü</span>{' '}
+          ve <span className="font-semibold text-[#1C2128]">%{aiData[1].deger}'i kirlilik</span>{' '}
           kaynaklı unsurlara işaret ediyor.
         </p>
 
@@ -333,7 +393,7 @@ export default function Analytics({ data }) {
         <p className="text-[11px] text-[#9CA3AF] mt-8 pt-4 border-t border-[#F0F1F3]">
           Analiz tarihi:{' '}
           {data.timestamp ? new Date(data.timestamp).toLocaleString('tr-TR') : '—'} · Bu
-          oranlar NDVI, yangın ve kirlilik risk modeline dayanmaktadır.
+          oranlar NDVI ve kirlilik risk modeline dayanmaktadır.
         </p>
       </div>
     </div>
