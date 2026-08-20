@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import mockHeatmapData from './mockHeatmapData';
 
+// Maksimum seçilebilir alan sınırı (m² cinsinden)
+// Örnek: 25 km² = 25,000,000 m² (İstediğin değere göre değiştirebilirsin)
+const MAX_AREA_SQ_METERS = 25 * 1000 * 1000;
+
 export default function Map({ onRegionSelect, isDarkMode }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -26,6 +30,68 @@ export default function Map({ onRegionSelect, isDarkMode }) {
       await import('leaflet-draw');
 
       if (mapInstanceRef.current) return;
+
+      // --- ALAN HESAPLAMA & SINIRLANDIRMA FONKSİYONLARI ---
+      const calculateGeodesicArea = (latLngs) => {
+        return L.GeometryUtil ? L.GeometryUtil.geodesicArea(latLngs) : computeApproxArea(latLngs);
+      };
+
+      // Basit geodesic alan hesabı (Harici kütüphaneye bağımlı kalmamak için)
+      const computeApproxArea = (coords) => {
+        const RADIUS = 6378137;
+        let area = 0;
+        const len = coords.length;
+        if (len < 3) return 0;
+
+        for (let i = 0; i < len; i++) {
+          const p1 = coords[i];
+          const p2 = coords[(i + 1) % len];
+          area += ((p2.lng - p1.lng) * (Math.PI / 180)) *
+                  (2 + Math.sin(p1.lat * (Math.PI / 180)) + Math.sin(p2.lat * (Math.PI / 180)));
+        }
+        return Math.abs((area * RADIUS * RADIUS) / 2.0);
+      };
+
+      // Dikdörtgen çizilirken sınır aşımında farenin gidebileceği maksimum noktayı hesaplar
+      const clampRectangleLatLng = (startLatLng, currentLatLng, maxArea) => {
+        const south = Math.min(startLatLng.lat, currentLatLng.lat);
+        const north = Math.max(startLatLng.lat, currentLatLng.lat);
+        const west = Math.min(startLatLng.lng, currentLatLng.lng);
+        const east = Math.max(startLatLng.lng, currentLatLng.lng);
+
+        const corners = [
+          L.latLng(south, west),
+          L.latLng(north, west),
+          L.latLng(north, east),
+          L.latLng(south, east)
+        ];
+
+        const currentArea = computeApproxArea(corners);
+
+        if (currentArea > maxArea) {
+          const scale = Math.sqrt(maxArea / currentArea);
+          const latDiff = (currentLatLng.lat - startLatLng.lat) * scale;
+          const lngDiff = (currentLatLng.lng - startLatLng.lng) * scale;
+
+          return L.latLng(startLatLng.lat + latDiff, startLatLng.lng + lngDiff);
+        }
+        return currentLatLng;
+      };
+
+      // Leaflet.Draw Dikdörtgen Sürükleme Davranışını Genişletme
+      if (L.Draw && L.Draw.Rectangle) {
+        L.Draw.Rectangle.prototype._onMouseMove = function (e) {
+          const latlng = e.latlng;
+          this._tooltip.updatePosition(latlng);
+
+          if (this._isDrawing) {
+            // Alanı sınırla: max limitin üstüne çıkarsa koordinatı frenle
+            const clampedLatLng = clampRectangleLatLng(this._startLatLng, latlng, MAX_AREA_SQ_METERS);
+            this._drawShape(clampedLatLng);
+          }
+        };
+      }
+      // ----------------------------------------------------
 
       const map = L.map(mapRef.current, { zoomControl: false }).setView([39.0, 35.0], 6);
 
@@ -56,7 +122,14 @@ export default function Map({ onRegionSelect, isDarkMode }) {
       const drawControl = new L.Control.Draw({
         position: 'bottomright',
         edit: { featureGroup: drawnItems },
-        draw: { polygon: true, rectangle: true, circle: false, circlemarker: false, marker: false, polyline: false },
+        draw: { 
+          polygon: true, 
+          rectangle: true, 
+          circle: false, 
+          circlemarker: false, 
+          marker: false, 
+          polyline: false 
+        },
       });
 
       map.addControl(drawControl);
@@ -64,6 +137,17 @@ export default function Map({ onRegionSelect, isDarkMode }) {
       map.on(L.Draw.Event.CREATED, (e) => {
         drawnItems.clearLayers();
         const layer = e.layer;
+        
+        // Poligon çizimlerinde tamamlanma anında alan kontrolü
+        let latLngs = layer.getLatLngs();
+        if (Array.isArray(latLngs[0])) latLngs = latLngs[0];
+        const drawnArea = computeApproxArea(latLngs);
+
+        if (drawnArea > MAX_AREA_SQ_METERS) {
+          alert(`Seçilen alan maksimum sınırı (${(MAX_AREA_SQ_METERS / 1000000).toFixed(0)} km²) aşıyor! Lütfen daha küçük bir alan seçin.`);
+          return;
+        }
+
         drawnItems.addLayer(layer);
 
         const geoJsonData = layer.toGeoJSON();
