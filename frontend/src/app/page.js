@@ -52,10 +52,12 @@ export default function Home() {
   const [webPushStatus, setWebPushStatus] = useState(false);
 
   const pollRef = useRef(null);
+  const pollInFlightRef = useRef(false);
 
   useEffect(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
+      pollInFlightRef.current = false;
     };
   }, []);
 
@@ -69,13 +71,19 @@ export default function Home() {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
+    pollInFlightRef.current = false;
   };
 
-  const startPolling = (id) => {
+  const startPolling = (id, coordinates) => {
     stopPolling();
     pollRef.current = setInterval(async () => {
+      // Bir durum isteği henüz tamamlanmadıysa paralel bir istek açmayalım.
+      // Aksi halde biten görev için Telegram raporu birden fazla kez tetiklenebilir.
+      if (pollInFlightRef.current) return;
+      pollInFlightRef.current = true;
+
       try {
-        const res = await fetch(`/api/analyze?task_id=${id}`);
+        const res = await fetch(`/api/analyze?task_id=${id}&user_id=${getUserId()}&lat=${coordinates.lat}&lng=${coordinates.lng}`);
         const statusData = await res.json();
 
         if (statusData.status === 'completed') {
@@ -91,6 +99,8 @@ export default function Home() {
       } catch (err) {
         console.error('Durum sorgulama hatası:', err);
         stopPolling();
+      } finally {
+        pollInFlightRef.current = false;
       }
     }, POLL_INTERVAL_MS);
   };
@@ -121,7 +131,7 @@ export default function Home() {
       const data = await res.json();
       if (!data.task_id) throw new Error('Görev numarası (task_id) alınamadı');
       setTaskId(data.task_id);
-      startPolling(data.task_id);
+      startPolling(data.task_id, coordinates);
     } catch (err) {
       console.error('Analiz hatası:', err);
       setLoading(false);
@@ -150,7 +160,7 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           email: notifEmail, 
-          region_id: analysisResult?.region_id || 1, // Ekibin API'si bölge ID istiyor
+          user_id: getUserId(),
           notification_type: 'email' 
         }),
       });

@@ -12,6 +12,8 @@ const aiEngineUrl = process.env.AI_ENGINE_URL || 'http://ai-engine:8000';
 const ANALYSIS_TIMEOUT_MS = Number(process.env.ANALYSIS_TIMEOUT_MS) || 180000;
 
 const ALERT_TO = process.env.ALERT_EMAIL_TO || process.env.SMTP_USER;
+const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+const notificationInternalSecret = process.env.NOTIFICATION_INTERNAL_SECRET;
 
 const redisClient = createClient({
     url: `redis://${redisHost}:${redisPort}`
@@ -63,6 +65,43 @@ function buildAlertText(taskId, result) {
         '',
         'Bu uyarı GeoMorphosis AI Engine tarafından otomatik üretilmiştir.'
     ].join('\n');
+}
+
+async function sendAnalysisEmailToSubscriber(userId, result) {
+    if (!userId) return false;
+
+    const report = {
+        lat: result?.coordinates?.lat,
+        lng: result?.coordinates?.lon,
+        riskLevel: result?.fire_risk || 'normal',
+        summary: result?.demo_mode
+            ? 'Uydu verisi alınamadığı için demo değerleri gösterildi.'
+            : 'Bölge analizi tamamlandı, detaylar panelde görüntülenebilir.',
+    };
+
+    try {
+        const response = await fetch(`${frontendUrl}/api/notify/email/subscriber`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(notificationInternalSecret
+                    ? { 'x-notification-internal-secret': notificationInternalSecret }
+                    : {}),
+            },
+            body: JSON.stringify({ userId, report }),
+        });
+
+        if (!response.ok) {
+            console.error(`[MUTFAK] Abone e-postası gönderilemedi: HTTP ${response.status}`);
+            return false;
+        }
+
+        const payload = await response.json();
+        return payload.success === true;
+    } catch (error) {
+        console.error('[MUTFAK] Abone e-postası servisine ulaşılamadı:', error);
+        return false;
+    }
 }
 
 async function runAnalysis(payload, coordinates) {
@@ -119,6 +158,8 @@ async function processTask(taskId) {
             `${result.demo_mode ? ' (demo modu)' : ''}`
         );
 
+        await sendAnalysisEmailToSubscriber(payload.user_id, result);
+
         // 5. Erken uyarı bildirimi
         if (shouldAlert(result)) {
             await notifier.sendAlert(
@@ -165,4 +206,4 @@ if (require.main === module) {
     startWorker();
 }
 
-module.exports = { processTask, extractCoordinates, shouldAlert, startWorker };
+module.exports = { processTask, extractCoordinates, shouldAlert, sendAnalysisEmailToSubscriber, startWorker };

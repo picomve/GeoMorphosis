@@ -56,6 +56,7 @@ class AnalyzeRequest(BaseModel):
     buffer_meters: int = 1000
     years: Optional[list[int]] = None
     region_name: Optional[str] = None
+    user_id: Optional[str] = None
     # Haritada kisitlanan alan. Asagidaki dogrulama bu alani okuyordu ama
     # model'de tanimli olmadigi icin Pydantic gonderilen bbox'i dusuruyordu
     # ve kontrol hicbir zaman calismiyordu.
@@ -159,6 +160,7 @@ def queue_analysis(request: AnalyzeRequest):
             "buffer_meters": request.buffer_meters,
             "years": request.years or [],
             "region_name": request.region_name,
+            "user_id": request.user_id,
         }
 
         r.hset(f"task:{task_id}", mapping={
