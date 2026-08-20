@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -101,6 +102,29 @@ function DistributionTooltip({ active, payload }) {
 }
 
 export default function Analytics({ data }) {
+  const [provinceName, setProvinceName] = useState(data?.region_name || null);
+
+  // Backend bir bölge adı vermediyse, koordinatlardan otomatik il adı çekiyoruz
+  // (ücretsiz OpenStreetMap Nominatim servisi ile).
+  useEffect(() => {
+    if (!data || data.region_name || !data.lat || !data.lon) return;
+
+    const controller = new AbortController();
+    fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${data.lat}&lon=${data.lon}&zoom=8&addressdetails=1`,
+      { signal: controller.signal, headers: { 'Accept-Language': 'tr' } }
+    )
+      .then((res) => res.json())
+      .then((json) => {
+        const name =
+          json?.address?.province || json?.address?.state || json?.address?.city || null;
+        if (name) setProvinceName(name);
+      })
+      .catch(() => {});
+
+    return () => controller.abort();
+  }, [data]);
+
   if (!data) return null;
 
   const ndviHistory = [
@@ -163,25 +187,33 @@ export default function Analytics({ data }) {
       </div>
 
       {/* KPI Kartları */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <KpiCard
-          label="NDVI Skoru"
-          value={data.ndvi_score ?? '0.00'}
-          sublabel="Bitki örtüsü yoğunluğu"
-          accent={ACCENT.ndvi}
-        />
-        <KpiCard
-          label="Kirlilik"
-          value={RISK_LABELS[currentPollution]}
-          sublabel="Çevresel etki"
-          accent={ACCENT.pollution}
-        />
-        <KpiCard
-          label="Koordinat"
-          value={`${(data.lat ?? 0).toFixed(2)}, ${(data.lon ?? 0).toFixed(2)}`}
-          sublabel={data.region_name ?? 'Analiz alanı'}
-          accent="#9CA3AF"
-        />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-3xl p-6 text-white shadow-xl">
+          <p className="text-sm opacity-80">🍃 NDVI Skoru</p>
+          <h2 className="text-5xl font-bold mt-3 tabular-nums">
+            {data.ndvi_score ?? '0'}
+          </h2>
+          <p className="mt-4 text-sm opacity-80">Bitki örtüsü yoğunluğu</p>
+        </div>
+
+        <div className="bg-gradient-to-r from-yellow-500 to-orange-500 rounded-3xl p-6 text-white shadow-xl">
+          <p className="text-sm opacity-80">🏭 Kirlilik</p>
+          <h2 className="text-4xl font-bold mt-3">
+            {RISK_LABELS[currentPollution]}
+          </h2>
+          <p className="mt-4 text-sm opacity-80">Çevresel etki</p>
+        </div>
+
+        <div className="bg-gradient-to-r from-blue-500 to-cyan-600 rounded-3xl p-6 text-white shadow-xl">
+          <p className="text-sm opacity-80">📍 Bölge</p>
+          <p className="text-lg font-bold mt-3 break-words">
+            {provinceName ?? 'Bilinmiyor'}
+          </p>
+          <p className="mt-2 text-xs opacity-70 tabular-nums">
+            {(data.lat ?? 0).toFixed(4)}, {(data.lon ?? 0).toFixed(4)}
+          </p>
+          <p className="mt-3 text-sm opacity-80">Analiz alanı</p>
+        </div>
       </div>
 
       {/* NDVI Grafiği */}
