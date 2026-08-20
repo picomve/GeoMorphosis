@@ -85,9 +85,10 @@ export default function Map({ onRegionSelect, isDarkMode }) {
           this._tooltip.updatePosition(latlng);
 
           if (this._isDrawing) {
-            // Alanı sınırla: max limitin üstüne çıkarsa koordinatı frenle
             const clampedLatLng = clampRectangleLatLng(this._startLatLng, latlng, MAX_AREA_SQ_METERS);
             this._drawShape(clampedLatLng);
+            // DÜZELTME: Orijinal metot eksik yazıldığı için tooltip bozuluyordu, geri eklendi.
+            this._tooltip.updateContent(this._getTooltipText());
           }
         };
       }
@@ -151,13 +152,22 @@ export default function Map({ onRegionSelect, isDarkMode }) {
         drawnItems.addLayer(layer);
 
         const geoJsonData = layer.toGeoJSON();
-        const center = layer.getBounds().getCenter();
+        // DÜZELTME: Çizilen şeklin sınırlarını (bbox) alıyoruz
+        const bounds = layer.getBounds();
+        const center = bounds.getCenter();
 
         onRegionSelect?.({
           geoJson: geoJsonData,
           lat: center.lat,
           lng: center.lng,
           radius: 1000,
+          // DÜZELTME: Sınırları bbox objesi olarak gönderiyoruz
+          bbox: {
+            minLat: bounds.getSouth(),
+            maxLat: bounds.getNorth(),
+            minLng: bounds.getWest(),
+            maxLng: bounds.getEast()
+          }
         });
       });
 

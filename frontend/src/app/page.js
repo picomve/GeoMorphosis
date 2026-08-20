@@ -124,6 +124,8 @@ export default function Home() {
         end_points: [],
         buffer_meters: selectedRegion.radius || 1000,
         user_id: getUserId(),
+        // DÜZELTME: Haritadan gelen bbox verisini api'ye taşıyoruz
+        bbox: selectedRegion.bbox || null,
       };
 
       const res = await fetch('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -258,6 +260,11 @@ export default function Home() {
                       </div>
                     </div>
                   )}
+                </div>
+
+                <div className="flex gap-3">
+                  <button onClick={handleAnalyze} disabled={loading} className="flex-1 bg-blue-600 text-white rounded-xl py-3 font-semibold hover:bg-blue-700 transition">Analiz Başlat</button>
+                  <button onClick={handleDetail} className="flex-1 bg-gray-200 dark:bg-gray-700 dark:text-white rounded-xl py-3 font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition">Detay</button>
                 </div>
               </>
             ) : (
