@@ -139,3 +139,139 @@ def test_analyze_region_derives_flat_fields_from_detections(monkeypatch, tmp_pat
     assert result["pollution_level"] == "orta"
     assert len(result["ai_results"]["yolo_detections"]) == 2
     assert result["ai_results"]["yolo_detections"][0]["class"] == "fire"
+
+
+def test_images_field_is_empty_in_demo_mode(monkeypatch):
+    """Uydu verisi yokken arayuz kirik gorsel gostermemeli."""
+    monkeypatch.setattr(
+        analysis_service,
+        "download_satellite_series",
+        lambda **kwargs: [
+            {
+                "year": 2025,
+                "status": "demo",
+                "path": None,
+                "image_path": None,
+                "rgb_path": None,
+                "ndvi_path": None,
+            }
+        ],
+    )
+
+    images = analysis_service.analyze_region(36.853, 28.2715)["images"]
+
+    assert images["available"] is False
+    assert images["years"] == []
+    assert images["change_map"] is None
+    assert images["size"] == 512
+
+
+def test_images_field_lists_downloaded_years(monkeypatch, tmp_path):
+    rgb, ndvi = tmp_path / "rgb.png", tmp_path / "ndvi.png"
+    rgb.write_bytes(b"x")
+    ndvi.write_bytes(b"x")
+
+    def _entry(year):
+        return {
+            "year": year,
+            "status": "ok",
+            "path": str(rgb),
+            "image_path": str(rgb),
+            "rgb_path": str(rgb),
+            "ndvi_path": str(ndvi),
+        }
+
+    monkeypatch.setattr(
+        analysis_service,
+        "download_satellite_series",
+        lambda **kwargs: [_entry(2020), _entry(2023), _entry(2025)],
+    )
+    monkeypatch.setattr(
+        analysis_service.YoloService,
+        "predict",
+        classmethod(lambda cls, path: {"boxes": [], "model_loaded": True}),
+    )
+    monkeypatch.setattr(analysis_service, "_safe_ndvi", lambda path: None)
+
+    images = analysis_service.analyze_region(36.853, 28.2715)["images"]
+
+    assert images["available"] is True
+    assert images["years"] == [2020, 2023, 2025]
+
+
+def test_change_map_is_reported_when_rendering_succeeds(monkeypatch, tmp_path):
+    import numpy as np
+
+    rgb, ndvi = tmp_path / "rgb.png", tmp_path / "ndvi.png"
+    rgb.write_bytes(b"x")
+    ndvi.write_bytes(b"x")
+
+    def _entry(year):
+        return {
+            "year": year,
+            "status": "ok",
+            "path": str(rgb),
+            "image_path": str(rgb),
+            "rgb_path": str(rgb),
+            "ndvi_path": str(ndvi),
+        }
+
+    monkeypatch.setattr(
+        analysis_service,
+        "download_satellite_series",
+        lambda **kwargs: [_entry(2020), _entry(2025)],
+    )
+    monkeypatch.setattr(
+        analysis_service.YoloService,
+        "predict",
+        classmethod(lambda cls, path: {"boxes": [], "model_loaded": True}),
+    )
+    monkeypatch.setattr(
+        analysis_service, "_safe_ndvi", lambda path: np.full((4, 4), 0.5, dtype="float32")
+    )
+    monkeypatch.setattr(
+        analysis_service, "render_ndvi_change_map", lambda t1, t2, out: out
+    )
+
+    images = analysis_service.analyze_region(36.853, 28.2715)["images"]
+
+    assert images["change_map"] == {"from_year": 2020, "to_year": 2025}
+
+
+def test_change_map_is_null_when_rendering_fails(monkeypatch, tmp_path):
+    import numpy as np
+
+    rgb, ndvi = tmp_path / "rgb.png", tmp_path / "ndvi.png"
+    rgb.write_bytes(b"x")
+    ndvi.write_bytes(b"x")
+
+    def _entry(year):
+        return {
+            "year": year,
+            "status": "ok",
+            "path": str(rgb),
+            "image_path": str(rgb),
+            "rgb_path": str(rgb),
+            "ndvi_path": str(ndvi),
+        }
+
+    monkeypatch.setattr(
+        analysis_service,
+        "download_satellite_series",
+        lambda **kwargs: [_entry(2020), _entry(2025)],
+    )
+    monkeypatch.setattr(
+        analysis_service.YoloService,
+        "predict",
+        classmethod(lambda cls, path: {"boxes": [], "model_loaded": True}),
+    )
+    monkeypatch.setattr(
+        analysis_service, "_safe_ndvi", lambda path: np.full((4, 4), 0.5, dtype="float32")
+    )
+    monkeypatch.setattr(
+        analysis_service, "render_ndvi_change_map", lambda t1, t2, out: None
+    )
+
+    images = analysis_service.analyze_region(36.853, 28.2715)["images"]
+
+    assert images["change_map"] is None

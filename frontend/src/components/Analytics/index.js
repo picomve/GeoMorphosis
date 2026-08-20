@@ -15,6 +15,7 @@ import {
 
 // Rapor bileşenini import ediyoruz
 import Report from '@/components/Report';
+import RegionImagery from '@/components/RegionImagery';
 
 const RISK_LABELS = {
   yok: 'Yok',
@@ -160,6 +161,10 @@ export default function Analytics({ data }) {
           </p>
         </div>
       </div>
+
+      {/* Bölge Görünümü - analiz sonucunun görsel karşılığı */}
+
+      <RegionImagery data={data} />
 
       {/* NDVI Grafiği */}
 

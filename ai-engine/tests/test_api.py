@@ -193,3 +193,71 @@ def test_queue_endpoint_accepts_a_valid_bbox(client, monkeypatch):
     assert response.status_code == 200
     assert response.json()["task_id"]
     assert seen["key"].startswith("task:")
+
+
+# --- /images ---
+
+def _write_cached_png(tmp_path, name):
+    import numpy as np
+    import cv2
+
+    path = tmp_path / name
+    cv2.imwrite(str(path), np.zeros((8, 8, 3), dtype="uint8"))
+    return path
+
+
+def test_images_returns_the_cached_tile(client, tmp_path, monkeypatch):
+    import services.satellite_api as satellite_api
+
+    monkeypatch.setattr(satellite_api, "_default_cache_dir", lambda: str(tmp_path))
+    _write_cached_png(tmp_path, "region_36p8530_28p2715_2020_rgb.png")
+
+    response = client.get(
+        "/images", params={"lat": 36.853, "lon": 28.2715, "year": 2020, "kind": "rgb"}
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert "max-age" in response.headers.get("cache-control", "")
+
+
+def test_images_serves_the_change_map_without_a_year(client, tmp_path, monkeypatch):
+    import services.satellite_api as satellite_api
+
+    monkeypatch.setattr(satellite_api, "_default_cache_dir", lambda: str(tmp_path))
+    _write_cached_png(tmp_path, "region_36p8530_28p2715_diff.png")
+
+    response = client.get(
+        "/images", params={"lat": 36.853, "lon": 28.2715, "kind": "diff"}
+    )
+
+    assert response.status_code == 200
+
+
+def test_images_returns_404_for_a_missing_tile(client, tmp_path, monkeypatch):
+    import services.satellite_api as satellite_api
+
+    monkeypatch.setattr(satellite_api, "_default_cache_dir", lambda: str(tmp_path))
+
+    response = client.get(
+        "/images", params={"lat": 1.0, "lon": 2.0, "year": 1999, "kind": "rgb"}
+    )
+
+    assert response.status_code == 404
+
+
+def test_images_requires_a_year_for_yearly_tiles(client):
+    response = client.get("/images", params={"lat": 1.0, "lon": 2.0, "kind": "ndvi"})
+
+    assert response.status_code == 400
+
+
+def test_images_rejects_an_unknown_kind(client):
+    """kind bir dosya yolu degil, kapali bir liste; path traversal denemesi
+    endpoint'e hic ulasmiyor."""
+    response = client.get(
+        "/images",
+        params={"lat": 1.0, "lon": 2.0, "year": 2020, "kind": "../../etc/passwd"},
+    )
+
+    assert response.status_code == 422

@@ -6,11 +6,19 @@ T1 (Önceki) ve T2 (Sonraki) tarihlerindeki NDVI ve Su kütlesi değişimlerini 
 import numpy as np
 
 
+# Bitki kaybi sayilmasi icin gereken en kucuk NDVI dususu.
+# Degisim haritasi da ayni esigi kullaniyor (change_map_service); aksi halde
+# haritadaki kirmizi alan panelde yazan yuzdeyle ortusmuyor.
+VEGETATION_LOSS_THRESHOLD = 0.25
+
+
 class ChangeDetectionService:
 
     @staticmethod
     def detect_vegetation_loss(
-        ndvi_t1: np.ndarray, ndvi_t2: np.ndarray, threshold: float = 0.25
+        ndvi_t1: np.ndarray,
+        ndvi_t2: np.ndarray,
+        threshold: float = VEGETATION_LOSS_THRESHOLD,
     ):
         """
         Ağaçsızlaşma (Deforestation) tespiti:

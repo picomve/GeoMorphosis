@@ -4,18 +4,23 @@ import sys
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 import redis
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 # utils ve services klasörlerindeki bağımlılıklar
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from services.analysis_service import analyze_region as analyze_region_service
-from services.satellite_api import get_latest_image
+from services.satellite_api import (
+    cached_image_path,
+    change_map_path,
+    get_latest_image,
+)
 from utils.index import get_db_connection, init_db
 
 
@@ -223,6 +228,40 @@ def internal_analyze(request: InternalAnalyzeRequest, req: Request):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- ANALIZ GORUNTULERI ---
+# Arayuzdeki once/sonra karsilastirmasi ve degisim haritasi bu endpoint'ten besleniyor.
+# Onbellek dosyalari zaten her analizde uretiliyor; burada yalnizca sunuluyorlar.
+@app.get("/images")
+def get_analysis_image(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    kind: Literal["rgb", "ndvi", "diff"] = Query(...),
+    year: Optional[int] = Query(default=None),
+):
+    """Bir bolgenin onbellekteki uydu karosunu veya degisim haritasini doner.
+
+    Dosya adi ISTEMCIDEN ALINMIYOR; lat/lon/year/kind parametrelerinden
+    sunucu tarafinda uretiliyor. Boylece dizin gezinme (path traversal)
+    yuzeyi hic olusmuyor.
+    """
+    if kind == "diff":
+        path = change_map_path(lat, lon)
+    else:
+        if year is None:
+            raise HTTPException(status_code=400, detail="rgb ve ndvi icin year gerekli")
+        path = cached_image_path(lat, lon, year, kind)
+
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Goruntu bulunamadi")
+
+    return FileResponse(
+        path,
+        media_type="image/png",
+        # Ayni goruntu polling sirasinda tekrar tekrar inmesin
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 # Mevcut satellite endpoint'ini bozmadan koruyoruz
