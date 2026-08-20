@@ -1,11 +1,10 @@
-FROM node:22-alpine
+FROM node:22-slim
 
 WORKDIR /app
 
 COPY package*.json ./
 
-RUN apk add --no-cache python3 make g++
-
+RUN apt-get update && apt-get install -y python3 make g++
 RUN npm install
 
 COPY . .
