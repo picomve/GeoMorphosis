@@ -4,6 +4,7 @@ import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import Analytics from '@/components/Analytics';
+import { getUserId } from '@/lib/userId';
 
 function RegionContent() {
   const searchParams = useSearchParams();
@@ -46,7 +47,7 @@ function RegionContent() {
 
       pollRef.current = setInterval(async () => {
         try {
-          const statusRes = await fetch(`/api/analyze?task_id=${taskId}`);
+          const statusRes = await fetch(`/api/analyze?task_id=${taskId}&user_id=${getUserId()}&lat=${lat}&lng=${lon}`);
           const statusData = await statusRes.json();
 
           if (cancelled) return;

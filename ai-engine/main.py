@@ -49,13 +49,18 @@ REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
 
 r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)
 
-# Güncellenmiş Request Modeli (Frontend ekibinin kullanacağı start ve end pointler eklendi)
+# Güncellenmiş Request Modeli (Haritada kısıtlanan alan bbox ve geoJson parametreleri eklendi)
 class AnalyzeRequest(BaseModel):
     start_points: list
     end_points: list = []
     buffer_meters: int = 1000
     years: Optional[list[int]] = None
     region_name: Optional[str] = None
+    user_id: Optional[str] = None
+    # Haritada kisitlanan alan. Asagidaki dogrulama bu alani okuyordu ama
+    # model'de tanimli olmadigi icin Pydantic gonderilen bbox'i dusuruyordu
+    # ve kontrol hicbir zaman calismiyordu.
+    bbox: Optional[dict] = None
 
 
 # Worker'ın (mutfak) çağırdığı iç analiz isteği
@@ -66,7 +71,6 @@ class InternalAnalyzeRequest(BaseModel):
     years: Optional[list[int]] = None
     region_name: Optional[str] = None
     ip_address: Optional[str] = None
-
 
 class SubscribeRequest(BaseModel):
     email: str
@@ -130,8 +134,20 @@ def read_root():
 def queue_analysis(request: AnalyzeRequest):
     """Vezne: analizi kuyruğa alır ve fiş numarasını (task_id) döner."""
     try:
+        # 1. Kısıtlanan alan (bbox) kontrolü ve doğrulaması
+        if request.bbox:
+            min_lat = request.bbox.get("minLat")
+            max_lat = request.bbox.get("maxLat")
+            min_lng = request.bbox.get("minLng")
+            max_lng = request.bbox.get("maxLng")
+
+            if min_lat is not None and max_lat is not None and min_lng is not None and max_lng is not None:
+                if min_lat >= max_lat or min_lng >= max_lng:
+                    raise HTTPException(status_code=400, detail="Geçersiz kısıtlanmış alan koordinatları (bbox).")
+
+        # Boş bir start_points listesi kabul edilmez
         if not request.start_points:
-            raise HTTPException(status_code=400, detail="start_points gerekli")
+            raise HTTPException(status_code=400, detail="Başlangıç noktaları gerekli ve boş olmamalı")
 
         lat, lon = _extract_lat_lon(request.start_points[0])
 
@@ -144,6 +160,7 @@ def queue_analysis(request: AnalyzeRequest):
             "buffer_meters": request.buffer_meters,
             "years": request.years or [],
             "region_name": request.region_name,
+            "user_id": request.user_id,
         }
 
         r.hset(f"task:{task_id}", mapping={
@@ -166,10 +183,7 @@ def queue_analysis(request: AnalyzeRequest):
 @app.post("/analyze")
 def analyze_region(request: AnalyzeRequest):
     return queue_analysis(request)
-
-
 # --- DURUM SORGULAMA ENDPOINT'İ ---
-# Frontend'in polling (sürekli sorgulama) yaparak analiz sonucunu alacağı yer.
 @app.get("/api/status/{task_id}")
 def get_status(task_id: str):
     task = r.hgetall(f"task:{task_id}")

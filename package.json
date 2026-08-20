@@ -1,4 +1,10 @@
 {
+  "name": "geomorphosis-monorepo",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && npm ci && npm run build",
+    "start": "cd frontend && npm ci && npm run start"
+  },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.9.1",
     "@prisma/client": "^7.9.0",

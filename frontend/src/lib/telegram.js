@@ -82,11 +82,15 @@ export async function sendTelegramNotificationToUser(userId, message, title = 'S
 export async function linkTelegramAccount(userId, chatId) {
   try {
     const prisma = await getPrisma();
-    const updatedUser = await prisma.regions_analysis.update({
+    const updatedUser = await prisma.regions_analysis.upsert({
       where: {
         user_id: userId,
       },
-      data: {
+      update: {
+        telegram_chat_id: String(chatId),
+      },
+      create: {
+        user_id: userId,
         telegram_chat_id: String(chatId),
       },
     });
@@ -96,5 +100,74 @@ export async function linkTelegramAccount(userId, chatId) {
   } catch (error) {
     console.error('Telegram hesabı eşleştirme hatası:', error);
     return null;
+  }
+}
+
+function formatAnalysisReport({ lat, lng, riskLevel, summary, timestamp }) {
+  const riskMap = {
+    normal: { emoji: '🟢', label: 'NORMAL' },
+    dusuk: { emoji: '🟡', label: 'DÜŞÜK' },
+    orta: { emoji: '🟠', label: 'ORTA' },
+    yuksek: { emoji: '🔴', label: 'YÜKSEK' },
+  };
+  const risk = riskMap[riskLevel] || riskMap.normal;
+
+  const dateStr = new Date(timestamp).toLocaleString('tr-TR', {
+    day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+
+  return [
+    '📊 <b>GEOMORPHOSIS SAHA ANALİZ RAPORU</b>',
+    '━━━━━━━━━━━━━━━━━━━',
+    `📍 Konum: ${lat}, ${lng}`,
+    `${risk.emoji} RİSK SEVİYESİ: ${risk.label}`,
+    '',
+    '📝 Özet Değerlendirme:',
+    summary,
+    '━━━━━━━━━━━━━━━━━━━',
+    `🗓️ Tarih: ${dateStr}`,
+  ].join('\n');
+}
+
+export async function sendAnalysisReportToUser(userId, reportData) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+
+  if (!token || token.includes('your_')) {
+    console.warn('Telegram konfigürasyonu eksik, rapor gönderilmiyor.');
+    return false;
+  }
+
+  try {
+    const prisma = await getPrisma();
+    const user = await prisma.regions_analysis.findUnique({
+      where: { user_id: userId },
+      select: { telegram_chat_id: true },
+    });
+
+    if (!user?.telegram_chat_id) {
+      console.warn(`Kullanıcının (${userId}) Telegram hesabı bağlı değil, rapor atlanıyor.`);
+      return false;
+    }
+
+    const text = formatAnalysisReport(reportData);
+    const panelUrl = `${process.env.NEXT_PUBLIC_APP_URL}/region?lat=${reportData.lat}&lon=${reportData.lng}`;
+
+    const response = await fetch(`${TELEGRAM_API}/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: user.telegram_chat_id,
+        text,
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [[{ text: '🌐 Web Panelinde Detaylı İncele', url: panelUrl }]],
+        },
+      }),
+    });
+
+    return response.ok;
+  } catch (error) {
+    console.error('Analiz raporu gönderme hatası:', error);
+    return false;
   }
 }
