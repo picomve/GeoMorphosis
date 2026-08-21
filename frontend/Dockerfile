@@ -4,7 +4,7 @@ FROM node:22-slim
 WORKDIR /app
 
 # 2. Prisma ve diğer native eklentiler için derleme araçlarını kur
-RUN apk add --no-cache python3 make g++
+RUN apt-get update && apt-get install -y python3 make g++
 
 # 3. Node.js ile gelen corepack'i aktif edip pnpm'i etkinleştir
 RUN corepack enable
