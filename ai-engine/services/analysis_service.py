@@ -2,8 +2,13 @@ from datetime import datetime, timezone
 from typing import Any
 
 from services.change_detection_service import ChangeDetectionService
+from services.change_map_service import render_ndvi_change_map
 from services.ndvi_service import NdviService
-from services.satellite_api import download_satellite_series
+from services.satellite_api import (
+    THUMB_SIZE,
+    change_map_path,
+    download_satellite_series,
+)
 from services.yolo_service import YoloService
 
 # Frontend Analytics bileseni tam olarak bu anahtarlari bekliyor
@@ -107,6 +112,7 @@ def analyze_region(
 
     detections: list[dict[str, Any]] = []
     model_loaded = False
+    change_map: dict[str, Any] | None = None
     ndvi_t1_mean = 0.0
     ndvi_t2_mean = 0.0
     ndvi_change = 0.0
@@ -147,6 +153,16 @@ def analyze_region(
                     (ndvi_t1 < 0.0).astype("uint8"),
                     (ndvi_t2 < 0.0).astype("uint8"),
                 )
+
+                # Rakamlarin gorsel karsiligi. Diziler zaten elde, dosyalari
+                # ikinci kez okumuyoruz.
+                if render_ndvi_change_map(
+                    ndvi_t1, ndvi_t2, change_map_path(lat, lon)
+                ):
+                    change_map = {
+                        "from_year": downloaded[0]["year"],
+                        "to_year": downloaded[-1]["year"],
+                    }
 
     deforestation = {
         "detected": def_res["detected"],
@@ -200,6 +216,15 @@ def analyze_region(
         # --- Durum bayraklari ---
         "demo_mode": demo_mode,
         "model_loaded": model_loaded,
+        # --- Gorseller ---
+        # URL'ler burada uretilmiyor; frontend bunlari coordinates + years ile
+        # kuruyor, boylece proxy oneki backend'e ve saklanan JSON'a sizmiyor.
+        "images": {
+            "size": int(THUMB_SIZE.split("x")[0]),
+            "available": bool(downloaded),
+            "years": [item["year"] for item in downloaded],
+            "change_map": change_map,
+        },
         # --- Detayli sonuc ---
         "ai_results": ai_results_dict,
         "downloaded": downloaded,

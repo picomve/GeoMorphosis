@@ -32,6 +32,25 @@ def _coordinate_slug(lat, lon):
     return f"{lat:.4f}_{lon:.4f}".replace("-", "m").replace(".", "p")
 
 
+# Dosya adi kurali tek yerde: hem yazan (download_satellite_series) hem sunan
+# (main.py /images) tarafi asagidaki iki fonksiyonu kullaniyor. Boylece
+# isimlendirme degisirse iki taraf birbirinden kopmuyor.
+
+def cached_image_path(lat, lon, year, kind, output_dir=None):
+    """Yil bazli uydu karosunun yolu. kind: 'rgb' veya 'ndvi'."""
+    if kind not in ("rgb", "ndvi"):
+        raise ValueError(f"Gecersiz goruntu turu: {kind}")
+
+    base = output_dir or _default_cache_dir()
+    return os.path.join(base, f"region_{_coordinate_slug(lat, lon)}_{year}_{kind}.png")
+
+
+def change_map_path(lat, lon, output_dir=None):
+    """NDVI degisim haritasinin yolu (yil bazli degil, bolge basina tek dosya)."""
+    base = output_dir or _default_cache_dir()
+    return os.path.join(base, f"region_{_coordinate_slug(lat, lon)}_diff.png")
+
+
 def _download_thumb(image, vis_params, file_path):
     """GEE thumbnail URL'sini indirip diske yazar."""
     url = image.getThumbURL(vis_params)
@@ -136,7 +155,6 @@ def download_satellite_series(
     roi = point.buffer(buffer_meters).bounds()
     print(f"Koordinat: [{lat}, {lon}] | Alan: {buffer_meters * 2}m x {buffer_meters * 2}m")
 
-    slug = _coordinate_slug(lat, lon)
     results = []
 
     for year in years:
@@ -161,7 +179,7 @@ def download_satellite_series(
 
         try:
             # YOLO bu RGB goruntusu uzerinde calisiyor
-            rgb_path = os.path.join(output_dir, f"region_{slug}_{year}_rgb.png")
+            rgb_path = cached_image_path(lat, lon, year, "rgb", output_dir)
             _download_thumb(
                 image,
                 {
@@ -178,7 +196,7 @@ def download_satellite_series(
             # NDVI bandi ayri bir gri tonlamali PNG olarak indiriliyor;
             # NdviService bu dosyayi okuyup -1..1 araligina geri olcekliyor
             ndvi_image = image.normalizedDifference([NIR_BAND, RGB_BANDS[0]]).rename("NDVI")
-            ndvi_path = os.path.join(output_dir, f"region_{slug}_{year}_ndvi.png")
+            ndvi_path = cached_image_path(lat, lon, year, "ndvi", output_dir)
             _download_thumb(
                 ndvi_image,
                 {

@@ -14,6 +14,8 @@ import {
   Tooltip,
 } from 'recharts';
 
+import RegionImagery from '@/components/RegionImagery';
+
 const ACCENT = {
   ndvi: '#2F6F52',
   pollution: '#3B82F6',
@@ -101,17 +103,31 @@ function DistributionTooltip({ active, payload }) {
   );
 }
 
+// Backend bir bolge adi verilmediginde region_name'e koordinat metnini yaziyor
+// ("37.5191, 36.8372"). Bu gercek bir yer adi degil; boyle bir deger geldiginde
+// Nominatim'den il adi cekmemiz gerekiyor.
+function isPlaceholderName(name) {
+  return !name || /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(String(name).trim());
+}
+
 export default function Analytics({ data }) {
-  const [provinceName, setProvinceName] = useState(data?.region_name || null);
+  // Koordinatlar sozlesmede data.coordinates altinda; ust duzey data.lat yok.
+  const lat = data?.coordinates?.lat;
+  const lon = data?.coordinates?.lon;
+  const hasCoordinates = typeof lat === 'number' && typeof lon === 'number';
+
+  const [provinceName, setProvinceName] = useState(
+    isPlaceholderName(data?.region_name) ? null : data.region_name
+  );
 
   // Backend bir bölge adı vermediyse, koordinatlardan otomatik il adı çekiyoruz
   // (ücretsiz OpenStreetMap Nominatim servisi ile).
   useEffect(() => {
-    if (!data || data.region_name || !data.lat || !data.lon) return;
+    if (!hasCoordinates || !isPlaceholderName(data?.region_name)) return;
 
     const controller = new AbortController();
     fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${data.lat}&lon=${data.lon}&zoom=8&addressdetails=1`,
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=8&addressdetails=1`,
       { signal: controller.signal, headers: { 'Accept-Language': 'tr' } }
     )
       .then((res) => res.json())
@@ -123,7 +139,7 @@ export default function Analytics({ data }) {
       .catch(() => {});
 
     return () => controller.abort();
-  }, [data]);
+  }, [data, hasCoordinates, lat, lon]);
 
   if (!data) return null;
 
@@ -210,11 +226,14 @@ export default function Analytics({ data }) {
             {provinceName ?? 'Bilinmiyor'}
           </p>
           <p className="mt-2 text-xs opacity-70 tabular-nums">
-            {(data.lat ?? 0).toFixed(4)}, {(data.lon ?? 0).toFixed(4)}
+            {hasCoordinates ? `${lat.toFixed(4)}, ${lon.toFixed(4)}` : '—'}
           </p>
           <p className="mt-3 text-sm opacity-80">Analiz alanı</p>
         </div>
       </div>
+
+      {/* Bölge Görünümü - analiz sonucunun görsel karşılığı */}
+      <RegionImagery data={data} />
 
       {/* NDVI Grafiği */}
       <div className="bg-white border border-[#E2E4E8] rounded-lg p-6">
@@ -370,8 +389,8 @@ export default function Analytics({ data }) {
 
         <p className="text-[15px] text-[#374151] leading-relaxed mb-8 max-w-xl">
           Bu bölgede yapılan analizde, tespit edilen etkenlerin{' '}
-          <span className="font-semibold text-[#1C2128]">%{aiData[0].deger}'i bitki örtüsü</span>{' '}
-          ve <span className="font-semibold text-[#1C2128]">%{aiData[1].deger}'i kirlilik</span>{' '}
+          <span className="font-semibold text-[#1C2128]">%{aiData[0].deger}&apos;i bitki örtüsü</span>{' '}
+          ve <span className="font-semibold text-[#1C2128]">%{aiData[1].deger}&apos;i kirlilik</span>{' '}
           kaynaklı unsurlara işaret ediyor.
         </p>
 
