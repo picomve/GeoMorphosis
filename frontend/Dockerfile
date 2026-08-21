@@ -1,29 +1,30 @@
 FROM node:22-slim
 
-# 1. Ana çalışma dizinini ayarla
 WORKDIR /app
 
-# 2. Prisma ve diğer native eklentiler için derleme araçlarını kur
-RUN apt-get update && apt-get install -y python3 make g++
+# Derleme araçlarını kur (SQLite ve Prisma için şart)
+RUN apt-get update && apt-get install -y python3 make g++ \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# 3. Node.js ile gelen corepack'i aktif edip pnpm'i etkinleştir
-RUN corepack enable
-
-# 4. BÜTÜN KODU kopyala (Tüm workspace ve package.json'ların görünmesi şart)
+# Tüm projeyi içeri al
 COPY . .
 
-# 5. Ana dizinde install yap (Böylece Next.js dahil tüm bağımlılıklar birbirine bağlanır)
-RUN pnpm install
+# Tertemiz, standart NPM kurulumu (--legacy-peer-deps kriz anlarında bağımlılık çakışmalarını ezer geçer)
+RUN npm install --legacy-peer-deps
 
-# 6. Sadece Prisma'yı generate etmek için geçici olarak frontend klasörüne gir
+# Prisma'yı generate et
 WORKDIR /app/frontend
 RUN npx prisma generate
 
-# 7. Uygulamayı başlatmak için tekrar ana (root) dizine dön
+# Ana dizine dön ve build al
 WORKDIR /app
+RUN npx turbo run build --filter=frontend --no-daemon
 
-# 8. Railway için portu aç
+# Port ayarları
+ENV HOSTNAME="0.0.0.0"
+ENV PORT=3000
 EXPOSE 3000
 
-# 9. Turborepo kullanarak ana dizinden frontend'i ayağa kaldır
-CMD ["npx", "turbo", "run", "dev", "--filter=frontend"]
+# Uygulamayı başlat
+CMD ["npx", "turbo", "run", "start", "--filter=frontend", "--no-daemon"]
