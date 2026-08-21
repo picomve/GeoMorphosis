@@ -124,6 +124,8 @@ export default function Home() {
         end_points: [],
         buffer_meters: selectedRegion.radius || 1000,
         user_id: getUserId(),
+        // DÜZELTME: Haritadan gelen bbox verisini api'ye taşıyoruz
+        bbox: selectedRegion.bbox || null,
       };
 
       const res = await fetch('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -240,7 +242,24 @@ export default function Home() {
               <>
                 <div className="bg-gray-50 dark:bg-gray-900 rounded-2xl p-6">
                   <h3 className="text-xl font-semibold mb-4 dark:text-white">Seçilen Alan / Koordinatlar</h3>
-                  <pre className="text-sm text-gray-600 dark:text-gray-400">{JSON.stringify(resolveCoordinates(selectedRegion), null, 2)}</pre>
+                  
+                  {/* Yeni şık koordinat görünümü */}
+                  {resolveCoordinates(selectedRegion) && (
+                    <div className="flex flex-col gap-3">
+                      <div className="flex justify-between items-center bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                        <span className="text-gray-500 dark:text-gray-400 font-medium text-sm">Enlem (Lat)</span>
+                        <span className="font-bold text-gray-800 dark:text-gray-100 font-mono text-sm">
+                          {resolveCoordinates(selectedRegion).lat.toFixed(6)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                        <span className="text-gray-500 dark:text-gray-400 font-medium text-sm">Boylam (Lng)</span>
+                        <span className="font-bold text-gray-800 dark:text-gray-100 font-mono text-sm">
+                          {resolveCoordinates(selectedRegion).lng.toFixed(6)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-3">

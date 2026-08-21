@@ -5,8 +5,8 @@ export async function POST(request) {
   try {
     const body = await request.json();
 
-    // Artık 'coordinates' yerine 'start_points' ve 'end_points' bekliyoruz
-    const { start_points, end_points, buffer_meters, region_name, user_id: userId } = body;
+    // DÜZELTME: Gelen body'den bbox verisini de çıkarıyoruz
+    const { start_points, end_points, buffer_meters, region_name, user_id: userId, bbox } = body;
 
     if (!start_points || start_points.length === 0) {
       return NextResponse.json({ error: 'Başlangıç noktaları (start_points) veya geçerli alan koordinatları gerekli' }, { status: 400 });
@@ -14,13 +14,14 @@ export async function POST(request) {
 
     const aiEngineUrl = process.env.NEXT_PUBLIC_AI_ENGINE_URL || 'http://localhost:8000';
 
-    // Vezne (FastAPI) için güncellenmiş payload yapımız (bbox ve geoJson eklendi)
+    // DÜZELTME: Vezne (FastAPI) için payload'a bbox'ı ekliyoruz
     const payload = {
       start_points,
       end_points: end_points || [],
       buffer_meters: buffer_meters || 1000,
       region_name: region_name || null,
       user_id: userId || null,
+      bbox: bbox || null, 
     };
 
     const controller = new AbortController();
