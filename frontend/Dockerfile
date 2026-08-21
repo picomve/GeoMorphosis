@@ -1,26 +1,20 @@
 FROM node:22-slim
 
-# 1. Ana çalışma dizinini ayarla
 WORKDIR /app
 
-# 2. Gerekli derleme araçlarını kur
 RUN apk add --no-cache python3 make g++
 
-# 3. Kök dizindeki bağımlılıkları kopyala ve kur
-COPY package*.json ./
-RUN npm install
-
-# 4. Tüm monorepo kodunu içeri kopyala
+# 1. BÜTÜN KODU kopyala ki monorepo'daki tüm package.json'lar görünsün
 COPY . .
 
-# 5. Çalışma dizinini frontend klasörüne geçir!
-WORKDIR /app/frontend
+# 2. Şimdi ana dizinde install yap (tüm workspace'lerin bağımlılıkları kurulacak)
+RUN npm install
 
-# 6. Prisma generate komutunu frontend içinde çalıştır
-# (Artık otomatik olarak ./prisma/schema.prisma dosyasını bulacak)
+# 3. Frontend dizinine geç ve Prisma'yı generate et
+WORKDIR /app/frontend
 RUN npx prisma generate
 
 EXPOSE 3000
 
-# 7. Frontend uygulamasını başlat
+# GeoMorphosis Next.js projesini başlat (Eğer Turbopack kullanıyorsan komutuna --turbo ekleyebilirsin)
 CMD ["npm", "run", "dev"]
