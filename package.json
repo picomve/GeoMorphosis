@@ -18,6 +18,9 @@
     "better-sqlite3": "^13.0.3",
     "leaflet.heat": "^0.2.0"
   },
+  "prisma": {
+  "schema": "frontend/prisma/schema.prisma"
+  },
   "devDependencies": {
     "@types/node": "^26.1.1",
     "prisma": "^7.9.0"
